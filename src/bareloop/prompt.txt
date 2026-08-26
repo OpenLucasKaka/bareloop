@@ -1,0 +1,10 @@
+
+# 测试task系统
+每次只调用一个task工具并等待结果：创建“设计数据库”任务并记住返回ID，立即claim再complete它；然后创建“开发API”任务，blockedBy只填数据库任务ID，claim再complete；然后创建“编写测试”任务，blockedBy只填API任务ID，claim再complete；最后调用list_tasks确认这三个任务全部为completed，禁止只创建不执行，禁止在blockedBy中填写subject。
+
+#测试background系统
+请先使用 bash 在后台执行 python -c "import time; print('BG_START'); time.sleep(3); print('BG_DONE')" 并设置 run_in_background=true，然后不要等待它，立即在前台执行 python -c "import time; print('FG_START'); time.sleep(4); print('FG_DONE')" 并设置 run_in_background=false，最后确认是否收到包含 BG_DONE、status=completed 的 task_notification，并汇报前后台两个任务的结果。
+
+#测试cron系统
+必须调用 cron_scheduler 工具创建任务，禁止调用 bash、write、edit 或创建脚本；参数为 cron="* * * * *"、prompt="只回复 CRON_TEST_OK 和当前时间"、recurring=true；创建成功后调用 list_crons，并且只报告工具的真实返回结果。
+

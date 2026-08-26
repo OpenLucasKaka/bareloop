@@ -1,0 +1,56 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and local Python versions
+.venv/
+venv/
+.python-version
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+service-account*.json
+*-credentials.json
+*.tfvars
+*.tfstate
+*.tfstate.*
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# BareLoop runtime state
+.bareloop/
+.memory/
+.tasks/
+.transcripts/
+.task_outputs/
+.scheduled_tasks.json
+
+# Local security reports and logs
+.gstack/
+*.log
+
+# Local scratch files
+/t.py
