@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 
 from mcp.server.mcpserver import MCPServer
 
-
 server = MCPServer(
     name="demo-tools",
     version="1.0.0",
@@ -23,10 +22,14 @@ async def current_time() -> str:
     return datetime.now(UTC).isoformat()
 
 
-if __name__ == "__main__":
+def run_server() -> None:
     server.run(
         transport="streamable-http",
         host=os.getenv("MCP_HOST", "127.0.0.1"),
         port=int(os.getenv("MCP_PORT", "8000")),
-        streamable_http_path="/mcp_integration",
+        streamable_http_path="/mcp",
     )
+
+
+if __name__ == "__main__":
+    run_server()

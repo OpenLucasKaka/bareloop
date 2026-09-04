@@ -1,7 +1,8 @@
-from typing import Any
 from dataclasses import dataclass
+from typing import Any
 
 DEFAULT_STOP_HOOK_BLOCK_CAP = 8
+
 
 @dataclass
 class GoalState:
@@ -13,12 +14,11 @@ class GoalState:
 
 
 class GoalController:
-
     def __init__(
-            self,
-            evaluator: Any,
-            block_num: int = DEFAULT_STOP_HOOK_BLOCK_CAP,
-            events: list[dict[str, Any]] | None = None
+        self,
+        evaluator: Any,
+        block_num: int = DEFAULT_STOP_HOOK_BLOCK_CAP,
+        events: list[dict[str, Any]] | None = None,
     ):
         if block_num < 1:
             raise ValueError("Block number must be greater than 0")
@@ -28,6 +28,3 @@ class GoalController:
         self.active: GoalState | None = None
         self.last_status: dict[str, Any] | None = None
         self.consecutive_blocks = 0
-
-
-

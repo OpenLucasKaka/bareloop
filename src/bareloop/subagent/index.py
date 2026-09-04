@@ -1,7 +1,7 @@
 from typing import Any
 
-from bareloop.settings import PRIMARY_MODEL, client
 from bareloop.hook import trigger_hook
+from bareloop.settings import PRIMARY_MODEL, client
 from bareloop.tools.dispatcher import dispatch_tool
 from bareloop.tools.registry import get_tool_schemas
 from bareloop.utils import normalize_tool_call

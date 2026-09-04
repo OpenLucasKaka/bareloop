@@ -14,6 +14,11 @@ venv/
 
 # BareLoop runtime state
 .bareloop/
+.memory/
+.tasks/
+.transcripts/
+.task_outputs/
+.scheduled_tasks.json
 
 # Node.js
 node_modules/
@@ -25,17 +30,31 @@ dist/
 build/
 out/
 public/
+*.egg-info/
 
 # Environment variables
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+
+# Credentials and local infrastructure state
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+service-account*.json
+*-credentials.json
+*.tfvars
+*.tfstate
+*.tfstate.*
 
 # IDE
 .vscode/
 .idea/
+.DS_Store
 *.swp
 *.swo
 
@@ -51,7 +70,11 @@ coverage/
 # Cache files
 .cache/
 .yarn/cache
+.gstack/
 
 # Lerna
 .lerna.json
 lerna-debug.log*
+
+# Local scratch files
+/t.py

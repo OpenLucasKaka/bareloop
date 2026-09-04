@@ -1,21 +1,41 @@
-from bareloop.tools.registry import get_tool_definitions
+from copy import deepcopy
 
+from bareloop.tools.registry import get_tool_schemas
 
+_RUNTIME_TOOL_NAMES = {
+    "bash",
+    "read",
+    "write",
+    "edit",
+    "glob",
+    "send_message",
+    "list_tasks",
+    "claim_task",
+    "complete_task",
+}
 
 TEAMMATE_TOOLS = [
-    *get_tool_definitions('main'),
-    {"name": "send_message",
-     "description": "Send an intermediate message to 'lead' or an active teammate.",
-     "input_schema": {"type": "object",
-                      "properties": {"to": {"type": "string"},
-                                     "content": {"type": "string"}},
-                      "required": ["to", "content"]}},
-    {"name": "submit_plan",
-     "description": "Submit a work plan for Lead approval.",
-     "input_schema": {"type": "object",
-                      "properties": {"plan": {"type": "string"}},
-                      "required": ["plan"]}},
-    # next(tool for tool in TASK_TOOLS if tool["name"] == "list_tasks"),
-    # next(tool for tool in TASK_TOOLS if tool["name"] == "claim_task"),
-    # next(tool for tool in TASK_TOOLS if tool["name"] == "complete_task"),
+    deepcopy(schema)
+    for schema in get_tool_schemas("main")
+    if schema["function"]["name"] in _RUNTIME_TOOL_NAMES
 ]
+for schema in TEAMMATE_TOOLS:
+    properties = schema["function"]["parameters"]["properties"]
+    properties.pop("cwd", None)
+    if schema["function"]["name"] == "bash":
+        properties.pop("shouldBack", None)
+TEAMMATE_TOOLS.append(
+    {
+        "type": "function",
+        "function": {
+            "name": "submit_plan",
+            "description": "Submit a work plan for Lead approval.",
+            "parameters": {
+                "type": "object",
+                "properties": {"plan": {"type": "string"}},
+                "required": ["plan"],
+                "additionalProperties": False,
+            },
+        },
+    }
+)

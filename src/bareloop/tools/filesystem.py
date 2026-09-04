@@ -1,11 +1,15 @@
 import glob
 from pathlib import Path
+
 from bareloop.settings import WORKDIR
-from bareloop.worktree import assignment_cwd
 
 
-def _resolve_path(path: str) -> Path:
-    root = WORKDIR.resolve()
+def _root_path(cwd: str | Path | None) -> Path:
+    return Path(cwd).resolve() if cwd is not None else WORKDIR.resolve()
+
+
+def _resolve_path(path: str, cwd: str | Path | None = None) -> Path:
+    root = _root_path(cwd)
     requested = Path(path)
     resolved = (requested if requested.is_absolute() else root / requested).resolve()
     if not resolved.is_relative_to(root):
@@ -13,10 +17,14 @@ def _resolve_path(path: str) -> Path:
     return resolved
 
 
-def run_edit(path: str, old_text: str, new_text: str) -> str:
-    error, cwd = assignment_cwd()
+def run_edit(
+    path: str,
+    old_text: str,
+    new_text: str,
+    cwd: str | Path | None = None,
+) -> str:
     try:
-        file_path = _resolve_path(path)
+        file_path = _resolve_path(path, cwd)
         raw = file_path.read_text(encoding="utf-8")
         if old_text not in raw:
             return f"Error: text not found in {path}"
@@ -28,9 +36,13 @@ def run_edit(path: str, old_text: str, new_text: str) -> str:
         return f"Error: {error}"
 
 
-def run_read(path: str, limit: int | None = None) -> str:
+def run_read(
+    path: str,
+    limit: int | None = None,
+    cwd: str | Path | None = None,
+) -> str:
     try:
-        lines = _resolve_path(path).read_text(encoding="utf-8").splitlines()
+        lines = _resolve_path(path, cwd).read_text(encoding="utf-8").splitlines()
         if limit is not None and limit < 1:
             return "Error: limit must be greater than zero"
         if limit is not None and len(lines) > limit:
@@ -43,9 +55,9 @@ def run_read(path: str, limit: int | None = None) -> str:
         return f"Error: {error}"
 
 
-def run_write(path: str, content: str) -> str:
+def run_write(path: str, content: str, cwd: str | Path | None = None) -> str:
     try:
-        file_path = _resolve_path(path)
+        file_path = _resolve_path(path, cwd)
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content, encoding="utf-8")
         return f"Wrote {path}"
@@ -53,8 +65,8 @@ def run_write(path: str, content: str) -> str:
         return f"Error: {error}"
 
 
-def run_glob(pattern: str) -> str:
-    root = WORKDIR.resolve()
+def run_glob(pattern: str, cwd: str | Path | None = None) -> str:
+    root = _root_path(cwd)
     try:
         matches = []
         for match in glob.glob(pattern, root_dir=root, recursive=True):

@@ -2,28 +2,57 @@ from typing import Any
 
 from bareloop.background_system import inject_background_results
 from bareloop.compact import CONTEXT_LIMIT, compact_history, micro_compact, tool_budget_result
-from bareloop.settings import PRIMARY_MODEL, client, tokenizer
-from bareloop.cron_scheduler import consume_cron_queue
+from bareloop.cron_scheduler import acknowledge_cron_jobs, consume_cron_queue, restore_cron_jobs
 from bareloop.hook import trigger_hook
 from bareloop.memory import consolidate_memories, extract_memories, load_memories
+from bareloop.settings import PRIMARY_MODEL, client, tokenizer
 from bareloop.tools.dispatcher import dispatch_tool
 from bareloop.tools.registry import get_tool_schemas
-from bareloop.utils import normalize_tool_call
 from bareloop.trace import TraceWriter
+from bareloop.utils import normalize_tool_call
 
-
-MAIN_TOOL_SCHEMAS = get_tool_schemas()
 
 def agent_loop(messages: list, tw: TraceWriter):
     fired = consume_cron_queue()
+    scheduled_messages: list[dict[str, str]] = []
+    delivery_state = {"accepted": False}
+    try:
+        completed = _run_agent_loop(messages, tw, fired, scheduled_messages, delivery_state)
+    except BaseException:
+        if delivery_state["accepted"]:
+            acknowledge_cron_jobs(fired)
+        else:
+            _remove_messages(messages, scheduled_messages)
+            restore_cron_jobs(fired)
+        raise
+    if completed or delivery_state["accepted"]:
+        acknowledge_cron_jobs(fired)
+    else:
+        _remove_messages(messages, scheduled_messages)
+        restore_cron_jobs(fired)
+
+
+def _remove_messages(messages: list, removed: list[dict[str, str]]) -> None:
+    messages[:] = [message for message in messages if all(message is not item for item in removed)]
+
+
+def _run_agent_loop(
+    messages: list,
+    tw: TraceWriter,
+    fired: list,
+    scheduled_messages: list[dict[str, str]],
+    delivery_state: dict[str, bool],
+) -> bool:
     if fired:
-        tw.write(event_type='收集定时任务', data=fired)
+        tw.write(event_type="收集定时任务", data=fired)
     for job in fired:
-        messages.append({"role": "user", "content": f"[Scheduled] {job.prompt}"})
+        scheduled_message = {"role": "user", "content": f"[Scheduled] {job.prompt}"}
+        messages.append(scheduled_message)
+        scheduled_messages.append(scheduled_message)
         print(f"  [cron] delivered {job.id}: {job.prompt[:60]}")
     rounds_since_todo = 0
     memories_content = load_memories(messages)
-    tw.write(event_type='提取相关记忆', data=memories_content)
+    tw.write(event_type="提取相关记忆", data=memories_content)
     altitude_index = len(messages) - 1 if messages and messages[-1]["role"] == "user" else None
     current_messages_count = len(messages) - 1
     while True:
@@ -35,9 +64,10 @@ def agent_loop(messages: list, tw: TraceWriter):
             )
         messages[:] = tool_budget_result(messages)
         messages[:] = micro_compact(messages)
+        tool_schemas = get_tool_schemas()
         current_token = tokenizer.apply_chat_template(
             messages,
-            tools=MAIN_TOOL_SCHEMAS,
+            tools=tool_schemas,
             tokenize=True,
             add_generation_prompt=True,
         )
@@ -51,22 +81,23 @@ def agent_loop(messages: list, tw: TraceWriter):
                 request_messages[altitude_index] = {
                     **request_messages[altitude_index],
                     "content": (
-                        f"{memories_content} \n "
-                        f"{request_messages[altitude_index]['content']}"
+                        f"{memories_content} \n {request_messages[altitude_index]['content']}"
                     ),
                 }
         except Exception as e:
             print(f"Error: {e}")
-            return
+            return False
         try:
             response = client.chat.completions.create(
-                model=PRIMARY_MODEL, messages=request_messages, tools=MAIN_TOOL_SCHEMAS
+                model=PRIMARY_MODEL, messages=request_messages, tools=tool_schemas
             )
         except Exception as e:
             print(f"Error: {e}")
-            return
+            return False
             # messages[:] = reactive_compact(messages)
         message = response.choices[0].message
+        if fired:
+            delivery_state["accepted"] = True
 
         assistant_message: dict[str, Any] = {
             "role": "assistant",
@@ -92,7 +123,7 @@ def agent_loop(messages: list, tw: TraceWriter):
                 print(f"本轮对话结束: 共调用工具次数:{tool_count}")
             extract_memories(messages, current_messages_count)
             consolidate_memories()
-            return
+            return True
         rounds_since_todo += 1
         if message.tool_calls:
             for tool in message.tool_calls:

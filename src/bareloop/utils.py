@@ -1,4 +1,6 @@
-import yaml, json
+import json
+
+import yaml
 
 
 def _parser_formatter(raw):
@@ -27,13 +29,12 @@ def _format_bash_result(output, exit_code):
         return output
     return f"Error: 后台任务执行失败{exit_code}"
 
+
 def format_team_events(msgs: list[dict]) -> str:
     lines = []
     for msg in msgs:
         metadata = msg.get("metadata", {})
         request_id = metadata.get("request_id")
         suffix = f" request_id={request_id}" if request_id else ""
-        lines.append(
-            f"[{msg['type']}{suffix}] {msg['from']}: {msg['content']}"
-        )
+        lines.append(f"[{msg['type']}{suffix}] {msg['from']}: {msg['content']}")
     return "[Team events]\n" + "\n".join(lines)

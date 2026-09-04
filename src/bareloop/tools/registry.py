@@ -53,6 +53,7 @@ _TOOL_DEFINITIONS = (
         parameters=_parameters(
             {
                 "command": _string("需要执行的命令"),
+                "cwd": _string("可选的命令工作目录"),
                 "shouldBack": {
                     "type": "boolean",
                     "description": "是否在后台执行长任务",
@@ -72,6 +73,7 @@ _TOOL_DEFINITIONS = (
                 "path": _string("相对于工作目录的文件路径"),
                 "old_text": _string("需要替换的原文本"),
                 "new_text": _string("替换后的新文本"),
+                "cwd": _string("可选的文件操作根目录"),
             },
             ("path", "old_text", "new_text"),
         ),
@@ -85,6 +87,7 @@ _TOOL_DEFINITIONS = (
             {
                 "path": _string("相对于工作目录的文件路径"),
                 "content": _string("需要写入的内容"),
+                "cwd": _string("可选的文件操作根目录"),
             },
             ("path", "content"),
         ),
@@ -98,6 +101,7 @@ _TOOL_DEFINITIONS = (
             {
                 "path": _string("相对于工作目录的文件路径"),
                 "limit": {"type": "integer", "description": "最多读取的行数"},
+                "cwd": _string("可选的文件操作根目录"),
             },
             ("path",),
         ),
@@ -108,7 +112,10 @@ _TOOL_DEFINITIONS = (
         name="glob",
         description="按 glob pattern 递归查找文件",
         parameters=_parameters(
-            {"pattern": _string("相对于工作目录的 glob pattern")},
+            {
+                "pattern": _string("相对于工作目录的 glob pattern"),
+                "cwd": _string("可选的文件操作根目录"),
+            },
             ("pattern",),
         ),
         handler=run_glob,
@@ -249,13 +256,14 @@ _TOOL_DEFINITIONS = (
 )
 
 _TOOLS_BY_NAME = {definition.name: definition for definition in _TOOL_DEFINITIONS}
+_DYNAMIC_TOOLS_BY_NAME: dict[str, ToolDefinition] = {}
 if len(_TOOLS_BY_NAME) != len(_TOOL_DEFINITIONS):
     raise RuntimeError("Duplicate tool name in registry")
 
 
 def get_tool_definitions(scope: ToolScope = "main") -> tuple[ToolDefinition, ...]:
     if scope == "main":
-        return _TOOL_DEFINITIONS
+        return (*_TOOL_DEFINITIONS, *_DYNAMIC_TOOLS_BY_NAME.values())
     if scope == "subagent":
         return tuple(tool for tool in _TOOL_DEFINITIONS if tool.allow_subagent)
     raise ValueError(f"Unknown tool scope: {scope}")
@@ -266,4 +274,20 @@ def get_tool_schemas(scope: ToolScope = "main") -> list[dict[str, Any]]:
 
 
 def get_tool(name: str) -> ToolDefinition | None:
-    return _TOOLS_BY_NAME.get(name)
+    return _DYNAMIC_TOOLS_BY_NAME.get(name) or _TOOLS_BY_NAME.get(name)
+
+
+def register_dynamic_tools(definitions: list[ToolDefinition]) -> None:
+    pending: dict[str, ToolDefinition] = {}
+    for definition in definitions:
+        if definition.name in _TOOLS_BY_NAME:
+            raise ValueError(f"Tool name conflicts with builtin tool: {definition.name}")
+        existing = pending.get(definition.name) or _DYNAMIC_TOOLS_BY_NAME.get(definition.name)
+        if existing is not None and existing != definition:
+            raise ValueError(f"Duplicate dynamic tool name: {definition.name}")
+        pending[definition.name] = definition
+    _DYNAMIC_TOOLS_BY_NAME.update(pending)
+
+
+def clear_dynamic_tools() -> None:
+    _DYNAMIC_TOOLS_BY_NAME.clear()

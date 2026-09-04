@@ -12,13 +12,23 @@ class BackgroundManager:
         self.lock = threading.Lock()
 
     def start_task(self, block):
+        cwd = block.get("cwd")
         with self.lock:
             task_id = f"task_{self._counter}os"
-            task = {"tool_use_id": block["id"], "command": block["command"], "status": "running"}
+            task = {
+                "tool_use_id": block["id"],
+                "command": block["command"],
+                "cwd": cwd,
+                "status": "running",
+            }
             self.task[task_id] = task
             self._counter += 1
 
-        thread = threading.Thread(target=self._run, args=(task_id, block["command"]), daemon=True)
+        thread = threading.Thread(
+            target=self._run,
+            args=(task_id, block["command"], cwd),
+            daemon=True,
+        )
 
         try:
             thread.start()
@@ -29,9 +39,9 @@ class BackgroundManager:
         print(f"  [background] started {task_id}: {block['command'][:60]}")
         return task_id
 
-    def _run(self, task_id, command):
+    def _run(self, task_id, command, cwd=None):
         try:
-            output, exit_code = run_shell_process(command)
+            output, exit_code = run_shell_process(command, cwd=cwd)
             result = format_shell_result(output, exit_code)
             status = "completed" if exit_code == 0 else "failed"
         except Exception as e:
@@ -53,7 +63,7 @@ class BackgroundManager:
                 result = self._results.pop(task_id, None)
                 if task and result:
                     ready.append((task_id, task, result))
-        self._ready.clear()
+            self._ready.clear()
         notifications = []
         for task_id, task, result in ready:
             notifications.append(

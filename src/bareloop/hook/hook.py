@@ -1,37 +1,37 @@
+from pathlib import Path
+
 from bareloop.settings import DENY_LIST, DESTRUCTIVE, WORKDIR
 
-HOOKS = {
-    "PreUserPromptInput": [],
-    "PreToolUse": [],
-    "PostToolUse": [],
-    "Stop": []
-}
+HOOKS = {"PreUserPromptInput": [], "PreToolUse": [], "PostToolUse": [], "Stop": []}
 
 
 def permission_hook(block):
-    arguments = block['arguments']
-    for deny in DENY_LIST:
-        if deny in block['name']:
-            return f"Permission denied: {deny}"
-    for d in DESTRUCTIVE:
-        if d in block['name']:
-            print("DESTRUCTIVE:", d)
-
-            choice = input("allow? y/n?: ")
-            return None if choice == "y" else 'user denied'
-    if block['name'] == 'bash':
-        print(f'Tool: bash需要执行{arguments["command"]}')
-        choice = input('allow? y/n?: ')
-        if choice.lower().strip() == 'y':
+    arguments = block["arguments"]
+    if block["name"] == "bash":
+        command = str(arguments.get("command", ""))
+        for deny in DENY_LIST:
+            if deny in command:
+                return f"Permission denied: {deny}"
+        for destructive in DESTRUCTIVE:
+            if destructive in command:
+                print("DESTRUCTIVE:", destructive)
+        print(f"Tool: bash需要执行{arguments['command']}")
+        choice = input("allow? y/n?: ")
+        if choice.lower().strip() == "y":
             return None
         return "user denied"
-    if block['name'] in ["read", "edit", "write"]:
-        file_path = (WORKDIR / arguments['path']).resolve()
-        if not file_path.is_relative_to(WORKDIR):
-            print('超出工作区域!')
-            print(f"Tool: {block['name']}({arguments['path']})")
-            choice = input('allow? y/n')
-            if choice.lower().strip() == 'y':
+    if block["name"] in {"read", "edit", "write", "glob"}:
+        root = Path(arguments.get("cwd") or WORKDIR).resolve()
+        requested = Path(arguments.get("path") or ".")
+        file_path = (requested if requested.is_absolute() else root / requested).resolve()
+        outside_workspace = not root.is_relative_to(WORKDIR.resolve())
+        if block["name"] != "glob":
+            outside_workspace = outside_workspace or not file_path.is_relative_to(WORKDIR.resolve())
+        if outside_workspace:
+            print("超出工作区域!")
+            print(f"Tool: {block['name']}({arguments})")
+            choice = input("allow? y/n")
+            if choice.lower().strip() == "y":
                 return None
             return "user denied"
 
@@ -59,10 +59,8 @@ def trigger_hook(event: str, *args):
                 return result
     except Exception as e:
         # print(f'触发hook异常: {e}')
-        print(
-            f"HOOK ERROR: {type(e).__name__}: {e!r}"
-        )
-        return f'触发hook异常: {e}'
+        print(f"HOOK ERROR: {type(e).__name__}: {e!r}")
+        return f"触发hook异常: {e}"
 
 
 def registry_hook(event: str, callback):
@@ -70,7 +68,7 @@ def registry_hook(event: str, callback):
 
 
 def hook():
-    registry_hook('PreUserPromptInput', context_inject_hook)
-    registry_hook('PreToolUse', permission_hook)
+    registry_hook("PreUserPromptInput", context_inject_hook)
+    registry_hook("PreToolUse", permission_hook)
     # registry_hook('PostToolUse', permission_hook)
-    registry_hook('Stop', summary_hook)
+    registry_hook("Stop", summary_hook)

@@ -1,38 +1,41 @@
+import asyncio
 import logging
 import os
+from contextlib import suppress
 
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["HF_HUB_VERBOSITY"] = "error"
 
 for logger_name in (
-        "httpx2",
-        "httpcore",
-        "mcp",
-        "transformers",
-        "huggingface_hub",
+    "httpx2",
+    "httpcore",
+    "mcp",
+    "transformers",
+    "huggingface_hub",
 ):
     logging.getLogger(logger_name).setLevel(logging.ERROR)
 
-import asyncio
-from contextlib import suppress
-from bareloop.cron_scheduler import agent_lock, start_cron_scheduler
-from bareloop.loop import agent_loop
-from bareloop.skills import _scan_skills, list_skills
-from bareloop.settings import WORKDIR, PROMPT_SESSION
-from bareloop.hook import hook as init_hooks, trigger_hook
-from bareloop.trace import TraceWriter
-from bareloop.agent_team import BUS, consume_lead_inbox, active_teammates
-from bareloop.mcp_integration import mcp_init
-from bareloop.utils import format_team_events
+from bareloop.agent_team import BUS, active_teammates, consume_lead_inbox  # noqa: E402
+from bareloop.cron_scheduler import agent_lock, start_cron_scheduler  # noqa: E402
+from bareloop.hook import hook as init_hooks  # noqa: E402
+from bareloop.hook import trigger_hook  # noqa: E402
+from bareloop.loop import agent_loop  # noqa: E402
+from bareloop.mcp_integration import mcp_init  # noqa: E402
+from bareloop.settings import PROMPT_SESSION, WORKDIR  # noqa: E402
+from bareloop.skills import _scan_skills, list_skills  # noqa: E402
+from bareloop.trace import TraceWriter  # noqa: E402
+from bareloop.utils import format_team_events  # noqa: E402
 
 
-def run_agent_turn_locked(messages, tw: TraceWriter, user_input: str | None = None, ):
+def run_agent_turn_locked(
+    messages,
+    tw: TraceWriter,
+    user_input: str | None = None,
+):
     if user_input is not None:
         trigger_hook("PreUserPromptInput", user_input)
         messages.append({"role": "user", "content": user_input})
     agent_loop(messages, tw)
-
-
 
 
 def build_system():
@@ -56,11 +59,9 @@ def create_session():
 
 
 async def wait_for_cli_event():
-    prompt_task = asyncio.create_task(
-        PROMPT_SESSION.prompt_async("请输入> ")
-    )
+    prompt_task = asyncio.create_task(PROMPT_SESSION.prompt_async("请输入> "))
     try:
-        while prompt_task.done():
+        while not prompt_task.done():
             if BUS.peek("lead"):
                 prompt_task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -76,8 +77,6 @@ async def wait_for_cli_event():
     return "user", content
 
 
-
-
 def init_agent():
     # 注册hooks
     init_hooks()
@@ -85,30 +84,30 @@ def init_agent():
     asyncio.run(mcp_init())
     # 扫描skill
     _scan_skills()
-    # 启动cron定时任务队列
-    start_cron_scheduler()
     had_teammates = False
     TW = TraceWriter()
-    print('输入问题，回车发送。输入 q 退出。\n')
-    messages = [
-        {'role': 'system', "content": build_system()}
-    ]
+    print("输入问题，回车发送。输入 q 退出。\n")
+    messages = [{"role": "system", "content": build_system()}]
+    # cron 与 CLI 共用同一份会话和 trace，避免定时任务丢失上下文。
+    start_cron_scheduler(messages, TW)
     while True:
         try:
             kind, input_prompt = asyncio.run(wait_for_cli_event())
-            if kind == 'user':
-                TW.write(event_type='用户输入', data=input_prompt)
+            if kind == "user":
+                TW.write(event_type="用户输入", data=input_prompt)
             if kind == "quit":
-                TW.write(event_type='停止对话')
+                TW.write(event_type="停止对话")
                 break
-            if kind == 'wake':
+            if kind == "wake":
                 inbox = consume_lead_inbox()
                 if not inbox:
                     continue
-                messages.append({
-                    "role": "user",
-                    "content": format_team_events(inbox),
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": format_team_events(inbox),
+                    }
+                )
                 print(f"[wake: {len(inbox)} team event(s) -> new turn]")
         except (EOFError, KeyboardInterrupt):
             break
@@ -124,4 +123,4 @@ def init_agent():
 
 
 if __name__ == "__main__":
-    asyncio.run(init_agent())
+    init_agent()

@@ -1,7 +1,7 @@
 from bareloop.settings import WORKDIR
 from bareloop.utils import _parser_formatter
 
-SKILLS_DIR = WORKDIR / '.bareloop' / "skills"
+SKILLS_DIR = WORKDIR / ".bareloop" / "skills"
 SKILL_REGISTRY = {}
 
 

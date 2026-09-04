@@ -84,9 +84,7 @@ _SCHEMA_VALUE_KEYWORDS = frozenset(
     }
 )
 _SCHEMA_ARRAY_KEYWORDS = frozenset({"allOf", "anyOf", "oneOf", "prefixItems"})
-_SCHEMA_MAP_KEYWORDS = frozenset(
-    {"$defs", "dependentSchemas", "patternProperties", "properties"}
-)
+_SCHEMA_MAP_KEYWORDS = frozenset({"$defs", "dependentSchemas", "patternProperties", "properties"})
 
 
 def _check_json_schema_keywords(schema: Any, path: str = "$") -> None:

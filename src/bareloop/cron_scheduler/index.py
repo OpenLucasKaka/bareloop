@@ -1,11 +1,11 @@
 import json
 import os
 import secrets
-from dataclasses import asdict
-from datetime import datetime
 import threading
+from dataclasses import asdict, dataclass
+from datetime import datetime
+
 from bareloop.settings import WORKDIR
-from dataclasses import dataclass
 
 
 @dataclass
@@ -17,15 +17,17 @@ class CronJob:
     pending_delivery: bool = False
     last_fired: str | None = None
 
+
 cron_start_flag = False
 STOP_CRON = threading.Event()
 cron_runtime_list: list[threading.Thread] = []
 runtime_lock = threading.RLock()
-DURABLE_CRON_PATH = WORKDIR / '.bareloop' / ".schedule_task.json"
+DURABLE_CRON_PATH = WORKDIR / ".bareloop" / ".schedule_task.json"
 cron_lock = threading.RLock()
 agent_lock = threading.Lock()
 scheduled_jobs: dict[str, CronJob] = {}
 cron_queue: list[CronJob] = []
+
 
 def _validate_cron_field(field: str, minimum: int, maximum: int) -> str | None:
     if field == "*":
@@ -70,8 +72,8 @@ def validate_cron(cron):
         ("month", 1, 12),
         ("day-of-week", 0, 6),
     ]
-    for field, (name, min, max) in zip(fields, field_rules):
-        error = _validate_cron_field(field, min, max)
+    for field, (_name, minimum, maximum) in zip(fields, field_rules, strict=True):
+        error = _validate_cron_field(field, minimum, maximum)
         if error:
             return f"Error: {error}"
     return None
@@ -79,14 +81,14 @@ def validate_cron(cron):
 
 def load_durable_cron():
     if not DURABLE_CRON_PATH.exists():
-        print(f'[cron]: {DURABLE_CRON_PATH} is not found')
+        print(f"[cron]: {DURABLE_CRON_PATH} is not found")
         return
     try:
         payload = json.loads(DURABLE_CRON_PATH.read_text())
         if not isinstance(payload, list):
             raise ValueError("expected a list")
     except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"解析{DURABLE_CRON_PATH}失败")
+        raise ValueError(f"解析{DURABLE_CRON_PATH}失败") from error
 
     loaded = 0
     with cron_lock:
@@ -97,28 +99,28 @@ def load_durable_cron():
                 if error:
                     raise ValueError(f"Error: {error}")
                 if not job.id.startswith("cron_"):
-                    raise ValueError(f"Error: cron任务的id格式错误")
+                    raise ValueError("Error: cron任务的id格式错误")
                 if not job.prompt.strip():
                     raise ValueError("prompt cannot be empty")
             except Exception as error:
-                raise RuntimeError(f"Error: {error}")
+                raise RuntimeError(f"Error: {error}") from error
             scheduled_jobs[job.id] = job
             if job.pending_delivery:
                 cron_queue.append(job)
             loaded += 1
-        print(f'[cron]: 已加载 {loaded} cronjobs')
+        print(f"[cron]: 已加载 {loaded} cronjobs")
 
 
 def _cron_field_matches(field, value: int):
-    if field == '*':
+    if field == "*":
         return True
-    if field.startWith('*/'):
+    if field.startswith("*/"):
         return value % int(field[2:]) == 0
-    if '-' in field:
-        start, end = field.split('-')
+    if "," in field:
+        return any(_cron_field_matches(item.strip(), value) for item in field.split(","))
+    if "-" in field:
+        start, end = field.split("-")
         return int(start) <= value <= int(end)
-    if ',' in field:
-        return any(_cron_field_matches(t.strip(), value) for t in field.split(','))
     return value == int(field)
 
 
@@ -129,9 +131,9 @@ def cron_matches(cron_expr, moment):
     cron_weekday = (moment.weekday() + 1) % 7
     minute, hour, day, month, weekday = fields
     if not (
-            _cron_field_matches(minute, moment.minute)
-            and _cron_field_matches(hour, moment.hour)
-            and _cron_field_matches(day, moment.day)
+        _cron_field_matches(minute, moment.minute)
+        and _cron_field_matches(hour, moment.hour)
+        and _cron_field_matches(month, moment.month)
     ):
         return False
 
@@ -172,7 +174,7 @@ def poll_due_jobs(moment: datetime):
                 if cron_matches(cron.cron, moment):
                     _enqueue_due_job(cron, time_maker)
             except Exception as error:
-                print('\033[33m[ERROR]\033[0m', error)
+                print("\033[33m[ERROR]\033[0m", error)
 
 
 def cron_scheduler_loop(stop_cron: threading.Event = STOP_CRON):
@@ -185,56 +187,61 @@ def has_cron_queue():
         return bool(cron_queue)
 
 
-def queue_processor_loop(stop_event: threading.Event = STOP_CRON):
+def queue_processor_loop(
+    messages: list,
+    trace_writer,
+    stop_event: threading.Event = STOP_CRON,
+):
     while not stop_event.wait(0.2):
-        if not has_cron_queue() or agent_lock.acquire(blocking=False):
+        if not has_cron_queue() or not agent_lock.acquire(blocking=False):
             continue
         try:
             if has_cron_queue():
                 from bareloop.mian import run_agent_turn_locked
 
-                run_agent_turn_locked()
+                run_agent_turn_locked(messages, trace_writer)
         finally:
             agent_lock.release()
 
 
 def save_cron_durable():
     with cron_lock:
-        payload = [
-            asdict(job)
-            for job in scheduled_jobs.values()
-        ]
+        payload = [asdict(job) for job in scheduled_jobs.values()]
+        DURABLE_CRON_PATH.parent.mkdir(parents=True, exist_ok=True)
         temporary = DURABLE_CRON_PATH.with_name(
             f"{DURABLE_CRON_PATH.name}.{os.getpid()}.{threading.get_ident()}.tmp"
         )
         try:
-            temporary.write_text(json.dumps(payload, indent=2))
+            temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
             os.replace(temporary, DURABLE_CRON_PATH)
         finally:
             temporary.unlink(missing_ok=True)
 
 
-def start_cron_scheduler():
+def start_cron_scheduler(messages: list, trace_writer):
     global cron_start_flag
     with runtime_lock:
         if cron_start_flag:
             return
+        STOP_CRON.clear()
         load_durable_cron()
-        cron_runtime_list.extend([
-            threading.Thread(
-                target=cron_scheduler_loop,
-                name="cron_scheduler_loop",
-                daemon=True
-            ),
-            threading.Thread(
-                target=queue_processor_loop,
-                name="queue_processor_loop",
-                daemon=True
-            )
-        ])
+        cron_runtime_list.extend(
+            [
+                threading.Thread(
+                    target=cron_scheduler_loop, name="cron_scheduler_loop", daemon=True
+                ),
+                threading.Thread(
+                    target=queue_processor_loop,
+                    args=(messages, trace_writer),
+                    name="queue_processor_loop",
+                    daemon=True,
+                ),
+            ]
+        )
         for thread in cron_runtime_list:
             thread.start()
         cron_start_flag = True
+
 
 def acknowledge_cron_jobs(jobs: list[CronJob]):
     changed: list[tuple[CronJob, bool]] = []
@@ -285,7 +292,6 @@ def consume_cron_queue() -> list[CronJob]:
     return jobs
 
 
-
 def new_cron_id() -> str:
     for _ in range(100):
         job_id = f"cron_{secrets.token_hex(4)}"
@@ -301,12 +307,7 @@ def schedule_cron(cron: str, prompt: str, recurring: bool):
     if not prompt.strip():
         return "Prompt cannot be empty"
     with cron_lock:
-        job = CronJob(
-            id=new_cron_id(),
-            cron=cron,
-            prompt=prompt,
-            recurring=recurring
-        )
+        job = CronJob(id=new_cron_id(), cron=cron, prompt=prompt, recurring=recurring)
         scheduled_jobs[job.id] = job
         try:
             save_cron_durable()
@@ -327,8 +328,7 @@ def cancel_job(job_id):
         scheduled_jobs.pop(job_id)
         cron_queue[:] = [queued for queued in cron_queue if queued.id != job_id]
         try:
-            if job.durable:
-                save_durable_jobs()
+            save_cron_durable()
         except Exception:
             scheduled_jobs[job_id] = job
             cron_queue[:] = previous_queue
@@ -336,31 +336,14 @@ def cancel_job(job_id):
     print(f"  [cron] cancelled {job_id}")
     return f"Cancelled {job_id}"
 
+
 def stop_runtime_threads():
-    global runtime_started
+    global cron_start_flag
     with runtime_lock:
-        if not runtime_started:
+        if not cron_start_flag:
             return
         STOP_CRON.set()
         for thread in cron_runtime_list:
             thread.join(timeout=1)
         cron_runtime_list.clear()
-        runtime_started = False
-
-
-def save_durable_jobs():
-    with cron_lock:
-        payload = [
-            asdict(job)
-            for job in scheduled_jobs.values()
-            if job.durable
-        ]
-        temporary = DURABLE_CRON_PATH.with_name(
-            f"{DURABLE_CRON_PATH.name}.{os.getpid()}.{threading.get_ident()}.tmp"
-        )
-        try:
-            temporary.write_text(json.dumps(payload, indent=2))
-            os.replace(temporary, DURABLE_CRON_PATH)
-        finally:
-            temporary.unlink(missing_ok=True)
-
+        cron_start_flag = False

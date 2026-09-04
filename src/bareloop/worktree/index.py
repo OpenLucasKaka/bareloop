@@ -1,45 +1,52 @@
-import re, subprocess
-from bareloop.settings import WORKDIR
-from pathlib import Path
-from bareloop.task_system import (
-    task_lock,
-    owner_in_progress,
-    check_task_status,
-    TaskStore,
-    load_task,
-    list_tasks,
-    save_task
-)
+from __future__ import annotations
 
-WORKTREE_DIR = (WORKDIR / '.bareloop' / '.worktrees').resolve()
+import re
+import subprocess
+from pathlib import Path
+
+from bareloop.settings import WORKDIR
+from bareloop.task_system import (
+    Task,
+    TaskStore,
+    list_tasks,
+    load_task,
+    save_task,
+    task_lock,
+)
+from bareloop.task_system import model as task_model
+
+WORKTREE_DIR = (WORKDIR / ".bareloop" / ".worktrees").resolve()
 WORKTREE_DIR_MATCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 teammate_assignment_info: dict[str, dict[str, object]] = {}
 
 
-def validate_worktree_name(self, name: str) -> str | None:
-    if isinstance(name, str) or not WORKTREE_DIR_MATCH.fullmatch(name):
-        return ValueError(f"Invalid worktree name: {name}")
+def validate_worktree_name(name: str) -> str | None:
+    if not isinstance(name, str) or WORKTREE_DIR_MATCH.fullmatch(name) is None:
+        return f"Invalid worktree name: {name}"
     if ".." in name:
-        return ValueError(f"Invalid worktree name: can not contain ..")
+        return "Invalid worktree name: cannot contain '..'"
     return None
 
 
-def _run_git(args: list[str], cwd: Path | None = None):
+def _run_git(args: list[str], cwd: Path | None = None) -> tuple[bool, str]:
     try:
         result = subprocess.run(
-            args=['git', *args],
+            ["git", *args],
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=60,
         )
-    except (OSError, subprocess.TimeoutExpired) as e:
-        return False, f"{type(e).__name__}: {e}"
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"{type(exc).__name__}: {exc}"
     output = (result.stdout + result.stderr).strip()
     return result.returncode == 0, output
 
 
-def _resolve_worktree_path(name: str):
+def _resolve_worktree_path(name: str) -> Path:
+    error = validate_worktree_name(name)
+    if error:
+        raise ValueError(error)
     path = (WORKTREE_DIR / name).resolve()
     if not path.is_relative_to(WORKTREE_DIR) or path == WORKTREE_DIR:
         raise ValueError(f"Invalid worktree name: {name}")
@@ -50,13 +57,13 @@ def _create_worktree_branch(name: str) -> str:
     return f"wt/{name}"
 
 
-def _read_registered_worktrees():
+def _read_registered_worktrees() -> tuple[dict[Path, dict[str, str]], str | None]:
     ok, output = _run_git(["worktree", "list", "--porcelain"])
     if not ok:
         return {}, f"cannot read Git worktree registry: {output}"
     entries: dict[Path, dict[str, str]] = {}
     current: dict[str, str] = {}
-    for line in output.splitlines() + [""]:
+    for line in [*output.splitlines(), ""]:
         if not line:
             raw_path = current.get("worktree")
             if raw_path:
@@ -68,11 +75,11 @@ def _read_registered_worktrees():
     return entries, None
 
 
-def _read_registered_worktree(name: str):
+def _read_registered_worktree(name: str) -> tuple[Path | None, str | None]:
     try:
         path = _resolve_worktree_path(name)
-    except ValueError as e:
-        return None, str(e)
+    except ValueError as exc:
+        return None, str(exc)
     entries, error = _read_registered_worktrees()
     if error:
         return None, error
@@ -82,77 +89,94 @@ def _read_registered_worktree(name: str):
         return None, f"worktree '{name}' is missing at {path}"
     expected_branch = f"refs/heads/{_create_worktree_branch(name)}"
     if entries[path].get("branch") != expected_branch:
-        return None, (f"worktree '{name}' is not registered on expected "
-                      f"branch '{_create_worktree_branch(name)}'")
+        return None, (
+            f"worktree '{name}' is not registered on expected branch "
+            f"'{_create_worktree_branch(name)}'"
+        )
     return path, None
 
 
-def task_worktree_cwd(task):
+def task_worktree_cwd(task: Task) -> tuple[Path | None, str | None]:
     if not task.worktree:
-        return WORKDIR, None
-    path, error = _read_registered_worktree(task.worktree)
-    return (path, error), error
+        return WORKDIR.resolve(), None
+    return _read_registered_worktree(task.worktree)
 
 
 def assignment_cwd(owner: str) -> Path:
-    with task_lock:
+    if not isinstance(owner, str) or not owner.strip():
+        raise ValueError("owner must be a non-empty string")
+    with task_lock():
         assignment = teammate_assignment_info.get(owner)
-        task = owner_in_progress(owner)
-        # 工作区信息丢失或者不存在(不需要在worktree中工作)
-        if task and not assignment:
-            cwd, error = task_worktree_cwd(task)
-            if error:
-                raise ValueError(error)
-        # 存在任务 但是匹配不上
-        if assignment.get("task_id") != task.id:
-            raise RuntimeError(
-                f"Owner {owner} is still assigned to "
-                f"{assignment['task_id']}; cannot switch to {task.id}"
-            )
-        task = load_task(str(assignment["task_id"]))
-        if not check_task_status(task.id, ['pending', 'completed']):
-            raise ValueError(f"Task {task.id} is not pending or completed")
+        if assignment is None:
+            raise FileNotFoundError(f"Owner {owner} has no task assignment")
+
+        task_id = assignment.get("task_id")
+        if not isinstance(task_id, str):
+            raise ValueError(f"Owner {owner} has an invalid task assignment")
+        task = load_task(task_id)
+        if task.owner != owner:
+            raise ValueError(f"Task {task.id} is not owned by {owner}")
+        if task.status not in {"in_process", "completed"}:
+            raise ValueError(f"Task {task.id} is not in process or completed")
+
         cwd, error = task_worktree_cwd(task)
-        if error:
-            raise ValueError(error)
-        if cwd.resolve() != Path(assignment["cwd"]).resolve():
+        if error or cwd is None:
+            raise ValueError(error or f"Task {task.id} has no usable working directory")
+        raw_assignment_cwd = assignment.get("cwd")
+        if not isinstance(raw_assignment_cwd, (str, Path)):
+            raise ValueError(f"Owner {owner} has an invalid assignment cwd")
+        if cwd.resolve() != Path(raw_assignment_cwd).resolve():
             raise ValueError(f"Assignment cwd changed for task {task.id}")
-        return cwd
+        return cwd.resolve()
 
 
-def create_worktree(name: str, task_id: str):
-    error = validate_worktree_name()
+def _rollback_created_worktree(path: Path, branch: str) -> list[str]:
+    errors: list[str] = []
+    ok, output = _run_git(["worktree", "remove", "--force", str(path)])
+    if not ok:
+        errors.append(f"worktree removal failed: {output}")
+    branch_exists, _ = _run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"])
+    if branch_exists:
+        ok, output = _run_git(["branch", "-D", branch])
+        if not ok:
+            errors.append(f"branch removal failed: {output}")
+    return errors
+
+
+def create_worktree(name: str, task_id: str) -> str:
+    error = validate_worktree_name(name)
     if error:
-        return f"Cannot create worktree: {error}"
+        return f"Error: {error}"
     try:
         path = _resolve_worktree_path(name)
-        task_path = TaskStore.get_path(task_id)
-    except Exception as e:
-        return f"Error:{e}"
+        task_path = TaskStore(task_model.TASK_DIR).get_path(task_id)
+    except (TypeError, ValueError) as exc:
+        return f"Error: {exc}"
     branch = _create_worktree_branch(name)
 
-    with task_lock:
+    with task_lock():
         if not task_path.exists():
-            return f"Error: {task_id}不存在"
-        task = load_task(task_id)
+            return f"Error: Task {task_id} not found"
+        try:
+            task = load_task(task_id)
+        except FileNotFoundError:
+            return f"Error: Task {task_id} not found"
         if task.status != "pending" or task.owner is not None:
-            return f"Error: Task {task_id} 必须是 pending 和 unowned"
+            return f"Error: Task {task_id} must be pending and unowned"
         if task.worktree:
-            return f"Error: Task {task_id} 已使用 worktree '{task.worktree}'"
-        if any(t.worktree == name for t in list_tasks() if t.id != task_id):
-            return f"Error: Worktree '{name}' 已经关联其他task"
+            return f"Error: Task {task_id} already uses worktree '{task.worktree}'"
+        if any(item.worktree == name for item in list_tasks() if item.id != task_id):
+            return f"Error: Worktree '{name}' is already bound to another task"
         if path.exists():
-            return f"Error: Worktree path 已经存在: {path}"
-        # 获取当前 Git 仓库主工作区的根目录
+            return f"Error: Worktree path already exists: {path}"
+
         ok, root = _run_git(["rev-parse", "--show-toplevel"])
         if not ok or Path(root).resolve() != WORKDIR.resolve():
             return "Error: Working directory must be the root of a Git repository"
-        # 检查 branch 名称是否合法
         ok, branch_check = _run_git(["check-ref-format", "--branch", branch])
         if not ok:
             return f"Error: Invalid worktree branch '{branch}': {branch_check}"
-        exists, _ = _run_git(["show-ref", "--verify", "--quiet",
-                             f"refs/heads/{branch}"])
+        exists, _ = _run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"])
         if exists:
             return f"Error: Branch '{branch}' already exists"
         entries, registry_error = _read_registered_worktrees()
@@ -162,14 +186,11 @@ def create_worktree(name: str, task_id: str):
             return f"Error: Worktree path is already registered: {path}"
 
         WORKTREE_DIR.mkdir(parents=True, exist_ok=True)
-        ok, result = _run_git(["worktree", "add", "-b", branch,
-                              str(path), "HEAD"])
+        ok, result = _run_git(["worktree", "add", "-b", branch, str(path), "HEAD"])
         if not ok:
             entries, registry_error = _read_registered_worktrees()
-            branch_exists, _ = _run_git(
-                ["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"]
-            )
-            artifacts = []
+            branch_exists, _ = _run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"])
+            artifacts: list[str] = []
             if path.exists():
                 artifacts.append(f"checkout path '{path}'")
             if registry_error is None and path in entries:
@@ -178,12 +199,9 @@ def create_worktree(name: str, task_id: str):
                 artifacts.append(f"branch '{branch}'")
             if artifacts:
                 return (
-                    "Partial operation: git worktree add reported an error "
-                    f"after leaving {', '.join(artifacts)}. Task {task_id} "
-                    "remains unbound and no Git data was deleted. Run "
-                    f"`git worktree list`, inspect '{path}' and '{branch}', "
-                    "then keep or remove those artifacts manually after "
-                    f"preserving any work. Git error: {result}"
+                    "Partial operation: git worktree add reported an error after leaving "
+                    f"{', '.join(artifacts)}. Task {task_id} remains unbound. "
+                    f"Git error: {result}"
                 )
             return f"Git error: {result}"
 
@@ -191,16 +209,25 @@ def create_worktree(name: str, task_id: str):
             task.worktree = name
             save_task(task)
         except Exception as exc:
-            return (f"Partial success: Worktree '{name}' was created at "
-                    f"{path} on branch '{branch}', but task binding failed: "
-                    f"{exc}. Git data was retained for manual recovery.")
+            task.worktree = None
+            rollback_errors = _rollback_created_worktree(path, branch)
+            if rollback_errors:
+                return (
+                    f"Partial operation: Could not bind worktree '{name}' to task "
+                    f"{task_id}: {exc}. Rollback needs manual recovery: "
+                    f"{'; '.join(rollback_errors)}"
+                )
+            return (
+                f"Error: Could not bind worktree '{name}' to task {task_id}: {exc}. "
+                "Created Git worktree and branch were rolled back."
+            )
 
     print(f"  \033[33m[worktree] created: {name} at {path}\033[0m")
     return f"Worktree '{name}' created at {path} for task {task_id}"
 
-def get_agent_cwd():
+
+def get_agent_cwd() -> tuple[Path | None, str | None]:
     try:
         return assignment_cwd("agent"), None
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
         return None, f"Error: Invalid task assignment: {exc}"
-

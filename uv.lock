@@ -51,12 +51,14 @@ name = "bareloop"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx2" },
     { name = "jinja2" },
     { name = "jsonschema" },
     { name = "mcp", extra = ["cli"] },
     { name = "openai" },
     { name = "prompt-toolkit" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "tokenizer" },
     { name = "transformers" },
 ]
@@ -69,12 +71,14 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx2", specifier = ">=2.12.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "mcp", extras = ["cli"], specifier = ">=2,<3" },
     { name = "openai", specifier = ">=3.3.1" },
     { name = "prompt-toolkit", specifier = ">=3.0.53" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "tokenizer", specifier = ">=3.6.4" },
     { name = "transformers", specifier = ">=5.15.1" },
 ]

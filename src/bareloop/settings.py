@@ -1,14 +1,12 @@
 import os
-import threading
+from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
-from transformers import AutoTokenizer
-
-from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit import PromptSession
 from prompt_toolkit.filters import to_filter
-from pathlib import Path
+from prompt_toolkit.key_binding import KeyBindings
+from transformers import AutoTokenizer
 
 WORKDIR = Path.cwd().resolve()
 
@@ -30,12 +28,28 @@ RESET = "\033[0m"
 BOLD = "\033[1m"
 
 client = OpenAI(
-    api_key=os.getenv("API_KEY"),
-    base_url=os.getenv("BASE_URL"),
+    api_key=os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY") or "bareloop-unconfigured",
+    base_url=os.getenv("BASE_URL") or None,
 )
 
 
-tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MODEL)
+class LazyTokenizer:
+    def __init__(self, model_name: str | None):
+        self.model_name = model_name
+        self._tokenizer = None
+
+    def _load(self):
+        if not self.model_name:
+            raise RuntimeError("TOKENIZER_MODEL must be configured before running the agent loop")
+        if self._tokenizer is None:
+            self._tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        return self._tokenizer
+
+    def __getattr__(self, name):
+        return getattr(self._load(), name)
+
+
+tokenizer = LazyTokenizer(TOKENIZER_MODEL)
 
 DENY_LIST = ["rm -rf", "reboot", "sudo"]
 DESTRUCTIVE = ["rm ", "> /etc/", "chmod 777"]
@@ -48,17 +62,21 @@ SUBAGENT_SYSTEM_PROMPT = f"""
 
 KEY_BINDINGS = KeyBindings()
 
-@KEY_BINDINGS.add('enter')
+
+@KEY_BINDINGS.add("enter")
 def submit_input(event):
     event.current_buffer.validate_and_handle()
 
+
 @KEY_BINDINGS.add("escape", "enter")
-def insert_newline(event):
+def insert_newline_with_escape(event):
     event.current_buffer.insert_text("\n")
 
+
 @KEY_BINDINGS.add("c-j")
-def insert_newline(event):
+def insert_newline_with_ctrl_j(event):
     event.current_buffer.insert_text("\n")
+
 
 PROMPT_SESSION = PromptSession(
     multiline=True,
@@ -66,14 +84,3 @@ PROMPT_SESSION = PromptSession(
 )
 # 输入框只占实际内容高度，多行时再自动增长
 PROMPT_SESSION.layout.current_window.dont_extend_height = to_filter(True)
-
-class CONSOLE_CONTROLLER:
-
-    def __init__(self):
-        self._lock = threading.Lock()
-        self.reader = None
-
-    def ask(self, promopt: str):
-        with self._lock:
-            return (self.reader or input())(promopt)
-
