@@ -1,7 +1,6 @@
 import re, json
-from bareloop.config import PRIMARY_MODEL, client
+from bareloop.settings import PRIMARY_MODEL, client,WORKDIR
 from bareloop.utils import _parser_formatter
-from bareloop.config import WORKDIR
 
 MEMORY_DIR = WORKDIR / '.bareloop' / ".memory"
 MEMORY_DIR.mkdir(exist_ok=True)

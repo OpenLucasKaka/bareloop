@@ -1,7 +1,7 @@
 import glob
 from pathlib import Path
-
 from bareloop.settings import WORKDIR
+from bareloop.worktree import assignment_cwd
 
 
 def _resolve_path(path: str) -> Path:
@@ -14,6 +14,7 @@ def _resolve_path(path: str) -> Path:
 
 
 def run_edit(path: str, old_text: str, new_text: str) -> str:
+    error, cwd = assignment_cwd()
     try:
         file_path = _resolve_path(path)
         raw = file_path.read_text(encoding="utf-8")

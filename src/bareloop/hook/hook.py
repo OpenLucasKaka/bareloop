@@ -1,5 +1,11 @@
-from .config import HOOKS
-from bareloop.config import DENY_LIST, DESTRUCTIVE, WORKDIR
+from bareloop.settings import DENY_LIST, DESTRUCTIVE, WORKDIR
+
+HOOKS = {
+    "PreUserPromptInput": [],
+    "PreToolUse": [],
+    "PostToolUse": [],
+    "Stop": []
+}
 
 
 def permission_hook(block):
@@ -33,7 +39,7 @@ def permission_hook(block):
 
 
 def context_inject_hook(quey):
-    print(f"\033[90m[HOOK] UserPromptSubmit: working in {WORKDIR}\033[0m")
+    print(f"\033[90m[CWD]: {WORKDIR}\033[0m")
     return None
 
 

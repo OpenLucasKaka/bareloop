@@ -1,17 +1,39 @@
-from bareloop.cron_scheduler import agent_lock, runtime_lock, start_cron_scheduler
+import logging
+import os
+
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["HF_HUB_VERBOSITY"] = "error"
+
+for logger_name in (
+        "httpx2",
+        "httpcore",
+        "mcp",
+        "transformers",
+        "huggingface_hub",
+):
+    logging.getLogger(logger_name).setLevel(logging.ERROR)
+
+import asyncio
+from contextlib import suppress
+from bareloop.cron_scheduler import agent_lock, start_cron_scheduler
 from bareloop.loop import agent_loop
 from bareloop.skills import _scan_skills, list_skills
-from bareloop.config import WORKDIR
-from bareloop.hook import hook, trigger_hook
+from bareloop.settings import WORKDIR, PROMPT_SESSION
+from bareloop.hook import hook as init_hooks, trigger_hook
+from bareloop.trace import TraceWriter
+from bareloop.agent_team import BUS, consume_lead_inbox, active_teammates
+from bareloop.mcp_integration import mcp_init
+from bareloop.utils import format_team_events
 
 
-def run_agent_turn_locked(user_input: str | None = None):
+def run_agent_turn_locked(messages, tw: TraceWriter, user_input: str | None = None, ):
     if user_input is not None:
         trigger_hook("PreUserPromptInput", user_input)
         messages.append({"role": "user", "content": user_input})
-    agent_loop(messages)
+    agent_loop(messages, tw)
 
-hook()
+
+
 
 def build_system():
     return f"""
@@ -29,23 +51,77 @@ def build_system():
         """
 
 
+def create_session():
+    pass
 
-if __name__ == "__main__":
+
+async def wait_for_cli_event():
+    prompt_task = asyncio.create_task(
+        PROMPT_SESSION.prompt_async("请输入> ")
+    )
+    try:
+        while prompt_task.done():
+            if BUS.peek("lead"):
+                prompt_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await prompt_task
+                return "wake", None
+            await asyncio.sleep(0.25)
+
+        content = await prompt_task
+    except (EOFError, KeyboardInterrupt):
+        return "quit", None
+    if content in {"quit", "q", "exit"}:
+        return "quit", None
+    return "user", content
+
+
+
+
+def init_agent():
+    # 注册hooks
+    init_hooks()
+    # 启动mcp
+    asyncio.run(mcp_init())
+    # 扫描skill
     _scan_skills()
+    # 启动cron定时任务队列
     start_cron_scheduler()
+    had_teammates = False
+    TW = TraceWriter()
     print('输入问题，回车发送。输入 q 退出。\n')
     messages = [
         {'role': 'system', "content": build_system()}
     ]
     while True:
         try:
-            user_input = input("\033[36m请输入>>\033[0m").strip()
+            kind, input_prompt = asyncio.run(wait_for_cli_event())
+            if kind == 'user':
+                TW.write(event_type='用户输入', data=input_prompt)
+            if kind == "quit":
+                TW.write(event_type='停止对话')
+                break
+            if kind == 'wake':
+                inbox = consume_lead_inbox()
+                if not inbox:
+                    continue
+                messages.append({
+                    "role": "user",
+                    "content": format_team_events(inbox),
+                })
+                print(f"[wake: {len(inbox)} team event(s) -> new turn]")
         except (EOFError, KeyboardInterrupt):
             break
-        quit_list = ['q', 'quit']
-        if user_input in quit_list:
-            break
-        if not user_input:
-            continue
         with agent_lock:
-            run_agent_turn_locked(user_input)
+            run_agent_turn_locked(messages, TW, input_prompt)
+        if active_teammates:
+            had_teammates = True
+        if not input_prompt:
+            continue
+        elif had_teammates and not BUS.peek("lead"):
+            print("[all teammates shut down]")
+            had_teammates = False
+
+
+if __name__ == "__main__":
+    asyncio.run(init_agent())

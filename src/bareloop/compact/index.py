@@ -1,4 +1,14 @@
-from .config import KEEP_RECENT
+from bareloop.settings import WORKDIR, PRIMARY_MODEL, client
+import time, json
+from bareloop.settings import WORKDIR
+
+
+KEEP_RECENT = 50
+CONTEXT_LIMIT = 1000
+TRANSCRIPT_DIR = WORKDIR / '.bareloop' / ".transcripts"
+PERSIST_THRESHOLD = 1000
+TOOL_RESULTS_DIR = WORKDIR / ".task_outputs" / "tool-results"
+TRANSCRIPT_DIR = WORKDIR / ".transcripts"
 
 def persist_large_output(content, id):
     if len(str(content)) < PERSIST_THRESHOLD: return content

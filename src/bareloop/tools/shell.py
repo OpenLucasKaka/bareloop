@@ -5,6 +5,8 @@ import threading
 from contextlib import suppress
 
 from bareloop.settings import WORKDIR
+from pathlib import Path
+from bareloop.worktree import get_agent_cwd
 
 _RUNNING_PROCESSES: set[subprocess.Popen[str]] = set()
 _PROCESS_LOCK = threading.RLock()
@@ -16,13 +18,13 @@ def format_shell_result(output: str, exit_code: int | None) -> str:
     return f"Error: command exited with code {exit_code}\n{output}"
 
 
-def run_shell_process(command: str, timeout: int = 120) -> tuple[str, int | None]:
+def run_shell_process(command: str, cwd: Path, timeout: int = 120) -> tuple[str, int | None]:
     process: subprocess.Popen[str] | None = None
     try:
         process = subprocess.Popen(
             command,
             shell=True,
-            cwd=WORKDIR,
+            cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -50,6 +52,10 @@ def run_shell_process(command: str, timeout: int = 120) -> tuple[str, int | None
                 _RUNNING_PROCESSES.discard(process)
 
 
-def run_bash(command: str, shouldBack: bool = False) -> str:
-    del shouldBack
+def run_bash(command: str) -> str:
     return format_shell_result(*run_shell_process(command))
+
+def run_agent_bash(command: str, shouldBack: bool = False) -> str:
+    get_agent_cwd()
+    return format_shell_result(*run_shell_process(command))
+

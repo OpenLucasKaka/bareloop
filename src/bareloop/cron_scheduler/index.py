@@ -4,7 +4,7 @@ import secrets
 from dataclasses import asdict
 from datetime import datetime
 import threading
-from bareloop.config import WORKDIR
+from bareloop.settings import WORKDIR
 from dataclasses import dataclass
 
 
@@ -79,7 +79,7 @@ def validate_cron(cron):
 
 def load_durable_cron():
     if not DURABLE_CRON_PATH.exists():
-        print(f'cron task {DURABLE_CRON_PATH} is not found')
+        print(f'[cron]: {DURABLE_CRON_PATH} is not found')
         return
     try:
         payload = json.loads(DURABLE_CRON_PATH.read_text())
@@ -106,7 +106,7 @@ def load_durable_cron():
             if job.pending_delivery:
                 cron_queue.append(job)
             loaded += 1
-        print(f'Loaded {loaded} cronjobs')
+        print(f'[cron]: 已加载 {loaded} cronjobs')
 
 
 def _cron_field_matches(field, value: int):

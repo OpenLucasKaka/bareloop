@@ -23,7 +23,10 @@ classifiers = [
 ]
 dependencies = [
     "jinja2>=3.1.6",
+    "jsonschema>=4.26.0",
+    "mcp[cli]>=2,<3",
     "openai>=3.3.1",
+    "prompt-toolkit>=3.0.53",
     "python-dotenv>=1.2.3",
     "tokenizer>=3.6.4",
     "transformers>=5.15.1",

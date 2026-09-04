@@ -1,3 +1,4 @@
+用于测试各个模块功能的prompt
 
 # 测试task系统
 每次只调用一个task工具并等待结果：创建“设计数据库”任务并记住返回ID，立即claim再complete它；然后创建“开发API”任务，blockedBy只填数据库任务ID，claim再complete；然后创建“编写测试”任务，blockedBy只填API任务ID，claim再complete；最后调用list_tasks确认这三个任务全部为completed，禁止只创建不执行，禁止在blockedBy中填写subject。

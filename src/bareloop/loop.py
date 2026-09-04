@@ -2,24 +2,28 @@ from typing import Any
 
 from bareloop.background_system import inject_background_results
 from bareloop.compact import CONTEXT_LIMIT, compact_history, micro_compact, tool_budget_result
-from bareloop.config import PRIMARY_MODEL, client, tokenizer
+from bareloop.settings import PRIMARY_MODEL, client, tokenizer
 from bareloop.cron_scheduler import consume_cron_queue
 from bareloop.hook import trigger_hook
 from bareloop.memory import consolidate_memories, extract_memories, load_memories
 from bareloop.tools.dispatcher import dispatch_tool
 from bareloop.tools.registry import get_tool_schemas
 from bareloop.utils import normalize_tool_call
+from bareloop.trace import TraceWriter
+
 
 MAIN_TOOL_SCHEMAS = get_tool_schemas()
 
-
-def agent_loop(messages: list):
+def agent_loop(messages: list, tw: TraceWriter):
     fired = consume_cron_queue()
+    if fired:
+        tw.write(event_type='收集定时任务', data=fired)
     for job in fired:
         messages.append({"role": "user", "content": f"[Scheduled] {job.prompt}"})
         print(f"  [cron] delivered {job.id}: {job.prompt[:60]}")
     rounds_since_todo = 0
     memories_content = load_memories(messages)
+    tw.write(event_type='提取相关记忆', data=memories_content)
     altitude_index = len(messages) - 1 if messages and messages[-1]["role"] == "user" else None
     current_messages_count = len(messages) - 1
     while True:

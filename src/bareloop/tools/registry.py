@@ -16,17 +16,34 @@ from bareloop.tools.shell import run_bash
 ToolScope = Literal["main", "subagent"]
 
 
-def _parameters(properties: dict[str, Any], required: tuple[str, ...] = ()) -> dict[str, Any]:
+def _parameters(
+    properties: dict[str, Any],
+    required: tuple[str, ...] = (),
+    **constraints: Any,
+) -> dict[str, Any]:
     return {
         "type": "object",
         "properties": properties,
         "required": list(required),
         "additionalProperties": False,
+        **constraints,
     }
 
 
-def _string(description: str) -> dict[str, str]:
-    return {"type": "string", "description": description}
+def _string(description: str | None = None, **constraints: Any) -> dict[str, Any]:
+    schema: dict[str, Any] = {"type": "string", **constraints}
+    if description is not None:
+        schema["description"] = description
+    return schema
+
+
+def _teammate_handler(name: str):
+    def handler(**kwargs: Any):
+        from bareloop.tools.adapters import teamate
+
+        return getattr(teamate, name)(**kwargs)
+
+    return handler
 
 
 _TOOL_DEFINITIONS = (
@@ -149,6 +166,85 @@ _TOOL_DEFINITIONS = (
         description="完成一个已领取的规划任务",
         parameters=_parameters({"task_id": _string("任务 ID")}, ("task_id",)),
         handler=run_complete_task,
+    ),
+    ToolDefinition(
+        name="spawn_teammate",
+        description="Spawn a persistent teammate.",
+        parameters=_parameters(
+            {
+                "name": _string(pattern="^[A-Za-z0-9_-]{1,64}$"),
+                "role": _string(),
+                "prompt": _string(),
+                "task_id": _string(pattern="^task_[0-9a-f]{8}$"),
+                "require_plan": {"type": "boolean"},
+            },
+            ("name", "role", "prompt"),
+        ),
+        handler=_teammate_handler("run_spawn_teammate"),
+    ),
+    ToolDefinition(
+        name="list_teammates",
+        description="List active teammates.",
+        parameters=_parameters({}),
+        handler=_teammate_handler("run_list_teammates"),
+    ),
+    ToolDefinition(
+        name="send_message",
+        description="Message a teammate.",
+        parameters=_parameters(
+            {
+                "to": _string(),
+                "content": _string(),
+            },
+            ("to", "content"),
+        ),
+        handler=_teammate_handler("run_send_messages"),
+    ),
+    ToolDefinition(
+        name="request_shutdown",
+        description="Ask a teammate to shut down.",
+        parameters=_parameters({"teammate": _string()}, ("teammate",)),
+        handler=_teammate_handler("run_request_shutdown"),
+    ),
+    ToolDefinition(
+        name="request_plan",
+        description="Require a teammate plan before workspace changes.",
+        parameters=_parameters(
+            {
+                "teammate": _string(),
+                "task": _string(),
+            },
+            ("teammate", "task"),
+        ),
+        handler=_teammate_handler("run_request_plan"),
+    ),
+    ToolDefinition(
+        name="review_plan",
+        description="Approve or reject a plan.",
+        parameters=_parameters(
+            {
+                "request_id": _string(),
+                "approve": {"type": "boolean"},
+                "feedback": _string(),
+            },
+            ("request_id", "approve"),
+        ),
+        handler=_teammate_handler("run_review_plan"),
+    ),
+    ToolDefinition(
+        name="create_worktree",
+        description="Create and bind a task worktree.",
+        parameters=_parameters(
+            {
+                "name": _string(
+                    pattern="^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+                    maxLength=64,
+                ),
+                "task_id": _string(),
+            },
+            ("name", "task_id"),
+        ),
+        handler=_teammate_handler("run_create_worktree"),
     ),
 )
 
