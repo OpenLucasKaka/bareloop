@@ -42,11 +42,11 @@ readable modules you can inspect and change.
 | Area | State | Current capability |
 | --- | --- | --- |
 | Agent loop | Implemented | OpenAI-compatible chat completions with iterative tool calls |
-| Tools | Implemented | Schema-validated registry, scoped dispatch, shell and filesystem tools |
+| Tools | Implemented | Schema-validated registry, scoped dispatch, and schemas refreshed after dynamic registration |
 | Workspace boundary | Implemented | Filesystem path containment relative to the active working directory |
-| Planning | Implemented | Durable tasks with dependencies, atomic claims, ownership, and completion |
-| Isolation | Implemented | Task-bound Git worktrees with path validation and rollback handling |
-| MCP | Implemented | Streamable HTTP discovery and dynamic tool registration |
+| Planning | Implemented | Durable tasks with dependencies, atomic claims, ownership, and assignment leases |
+| Isolation | Implemented | Task-bound Git worktrees with registry validation, lease-checked CWD routing, and rollback |
+| MCP | Implemented | Streamable HTTP discovery, namespaced tools, local/remote fallback, and dynamic registration |
 | Tracing | Implemented | Thread-safe JSONL writer for selected runtime events |
 | Hooks | Experimental | Hook registry with default pre-prompt, pre-tool, and stop callbacks |
 | Context | Experimental | Tool-output budgeting, micro-compaction, transcripts, and LLM summaries |
@@ -54,37 +54,80 @@ readable modules you can inspect and change.
 | Async work | Experimental | Background shell execution with later result injection |
 | Agent teams | Experimental | Teammates, JSONL mailboxes, plan review, and shutdown protocol |
 | Skills | Experimental | Discovery and on-demand loading from `.bareloop/skills/` |
-| Scheduling | In progress | Durable cron storage and polling exist; execution is not yet hardened |
+| Scheduling | Experimental | Validated five-field cron, durable queueing, shared-session delivery, and acknowledge/retry handling |
 | Goal/session runtime | In progress | State models exist, but the public session lifecycle is unfinished |
 
 ## How it works
 
 ```mermaid
-flowchart LR
-    A[CLI input<br/>team event] --> B[Shared message session]
-    B --> C[Hooks and memory retrieval]
-    C --> D[Output budget and context compaction]
-    D --> E[OpenAI-compatible model]
+flowchart TB
+    subgraph BOOT["1 · Runtime bootstrap"]
+        A[Register lifecycle hooks]
+        B[Discover MCP tools]
+        C[Scan local skills]
+        D[Create shared message session<br/>and start cron threads]
+        A --> D
+        B --> D
+        C --> D
+    end
 
-    E -->|final response| F[Trace event and memory extraction]
-    E -->|tool calls| G[Permission hook]
-    G --> H[Central tool registry]
+    subgraph INPUT["2 · Event intake"]
+        E[CLI prompt]
+        F[Lead mailbox event]
+        G[Due cron job]
+        H[Durable cron queue]
+        G --> H
+    end
 
-    H --> I[Built-in tools]
-    H --> J[Discovered MCP tools]
-    I --> K[Tool result]
-    J --> K
-    K --> D
+    subgraph LOOP["3 · Locked agent loop"]
+        I[Shared messages]
+        J[Memory retrieval]
+        K[Tool-output budget<br/>and context compaction]
+        L[OpenAI-compatible model]
+        M[Final response<br/>Stop hook + memory extraction]
+        N[PreToolUse permission hook]
+        O[Central tool registry<br/>fresh schemas each round]
+        P[Built-in tools]
+        Q[Namespaced MCP tools]
+        R[Tool result]
 
-    I --> L[Tasks and teammates]
-    L --> M[Optional Git worktree]
-    M --> K
+        I --> J --> K --> L
+        L -->|no tool call| M
+        L -->|tool calls| N --> O
+        O --> P
+        O --> Q
+        P --> R
+        Q --> R
+        R --> K
+    end
+
+    subgraph SERVICES["4 · Built-in services"]
+        S[Background shell]
+        T[Tasks + teammate mailboxes]
+        U[Validated task worktree]
+        V[Cron schedule / cancel]
+        T --> U
+    end
+
+    D --> I
+    E --> I
+    F --> I
+    H --> I
+    P --> S
+    P --> T
+    P --> V
+    S --> R
+    U --> R
+    V --> R
+    I -. selected lifecycle events .-> W[Ordered JSONL trace]
 ```
 
-The runtime initializes hooks, attempts MCP discovery, scans local skills, and creates one shared
-message session. Each turn retrieves relevant memories, budgets tool output, compacts context when
-needed, and calls the configured model. Tool calls pass through the permission hook and central
-registry before their results are appended to the next model round.
+Startup registers hooks, discovers and dynamically registers MCP tools, scans local skills, creates
+one shared message session, and starts the cron poller and queue processor. CLI input, Lead mailbox
+events, and due cron prompts all enter that session under the same agent lock. Each turn retrieves
+relevant memories, budgets tool output, compacts context when needed, and calls the configured model.
+Tool calls pass through the permission hook and the current central registry; built-in and MCP results
+then return to the next model round. Selected lifecycle events are written to ordered JSONL traces.
 
 ## Quick start
 
@@ -124,6 +167,21 @@ uv run python -m bareloop.mian
 Press `Enter` to send, `Esc` + `Enter` or `Ctrl` + `J` to insert a newline, and enter `q`,
 `quit`, or `exit` to stop.
 
+### Run interactively in PyCharm
+
+BareLoop uses `prompt_toolkit`, so its Run console needs terminal emulation for interactive input and
+multiline key bindings to work correctly. Open **Run → Edit Configurations**, add or edit a **Python**
+configuration, and use:
+
+- **Module name:** `bareloop.mian`
+- **Working directory:** the repository root
+- **Python interpreter:** the project's `.venv/bin/python`
+- **Environment files:** `.env`
+
+Then open **Modify options** and enable **Emulate terminal in output console**. See the
+[PyCharm Python run configuration documentation](https://www.jetbrains.com/help/pycharm/run-debug-configuration-python.html)
+for the corresponding IDE option.
+
 ### Run the bundled MCP demo (optional)
 
 Start the server in a second terminal:
@@ -133,8 +191,9 @@ uv run python -m bareloop.mcp_integration.server
 ```
 
 It exposes `add` and `current_time` at `http://127.0.0.1:8000/mcp`. BareLoop attempts the local
-endpoint first, then `MCP_REMOTE_URL` when configured. If no endpoint is reachable, startup
-continues without MCP tools.
+endpoint first, then `MCP_REMOTE_URL` when configured. Discovered tools are registered with names
+such as `mcp__demo__add`. If no endpoint is reachable, startup continues without MCP tools. A remote
+endpoint carrying `MCP_REMOTE_TOKEN` must use HTTPS; loopback HTTP remains available for local use.
 
 ## Configuration
 
@@ -192,9 +251,9 @@ end-to-end testing.
 ## Project status
 
 Version `0.1.0` establishes the experimental runtime surface. The core loop and most supporting
-modules exist, but cron execution, goal/session orchestration, complete event tracing,
-cross-platform support, and public API stability are still in progress. See the source and tests
-as the current contract.
+modules exist, including shared-session cron delivery with retry handling. Goal/session orchestration,
+complete event tracing, cross-platform support, and public API stability are still in progress. See
+the source and tests as the current contract.
 
 ## License
 

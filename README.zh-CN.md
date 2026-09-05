@@ -37,11 +37,11 @@ BareLoop 是一个紧凑的 Coding Agent Runtime，使用清晰的 Python 代码
 | 模块 | 状态 | 当前能力 |
 | --- | --- | --- |
 | Agent Loop | 已实现 | 兼容 OpenAI Chat Completions 的多轮工具调用 |
-| Tools | 已实现 | Schema 校验、Scope 调度、Shell 与文件系统工具 |
+| Tools | 已实现 | Schema 校验、Scope 调度，并在动态注册后刷新模型侧 Tool Schema |
 | Workspace 边界 | 已实现 | 文件操作限制在当前工作目录内，阻止路径逃逸 |
-| Task Planning | 已实现 | 持久化依赖、原子领取、Owner 绑定与完成状态 |
-| Worktree 隔离 | 已实现 | Task 绑定 Git Worktree、路径校验及失败回滚 |
-| MCP | 已实现 | Streamable HTTP 工具发现与动态注册 |
+| Task Planning | 已实现 | 持久化依赖、原子领取、Owner 绑定与 Assignment Lease |
+| Worktree 隔离 | 已实现 | Task 绑定 Git Worktree、注册校验、Lease CWD 路由及失败回滚 |
+| MCP | 已实现 | Streamable HTTP 发现、工具命名空间、本地/远程降级与动态注册 |
 | Trace | 已实现 | 为已接入事件提供线程安全的 JSONL Writer |
 | Hooks | 实验性 | Hook 注册表及默认 Pre-Prompt、Pre-Tool、Stop 回调 |
 | Context | 实验性 | 工具输出预算、微压缩、Transcript 和 LLM 摘要 |
@@ -49,36 +49,79 @@ BareLoop 是一个紧凑的 Coding Agent Runtime，使用清晰的 Python 代码
 | 后台任务 | 实验性 | 后台执行 Shell，并在后续循环注入结果 |
 | Agent Team | 实验性 | Teammate、JSONL 邮箱、Plan Review 与关闭协议 |
 | Skills | 实验性 | 从 `.bareloop/skills/` 发现并按需加载 Skill |
-| Cron | 开发中 | 已有持久化和轮询骨架，执行链仍需完善 |
+| Cron | 实验性 | 五段表达式校验、持久化队列、共享 Session 投递及确认/重试处理 |
 | Goal/Session | 开发中 | 已有状态模型，公开 Session 生命周期尚未完成 |
 
 ## 整体运行流程
 
 ```mermaid
-flowchart LR
-    A[CLI 输入<br/>Team 事件] --> B[共享消息 Session]
-    B --> C[Hooks 与记忆检索]
-    C --> D[输出预算与上下文压缩]
-    D --> E[OpenAI-compatible 模型]
+flowchart TB
+    subgraph BOOT["1 · Runtime 启动"]
+        A[注册生命周期 Hooks]
+        B[发现 MCP Tools]
+        C[扫描本地 Skills]
+        D[创建共享消息 Session<br/>并启动 Cron Threads]
+        A --> D
+        B --> D
+        C --> D
+    end
 
-    E -->|最终回复| F[Trace 事件与记忆提取]
-    E -->|工具调用| G[权限 Hook]
-    G --> H[中央工具注册表]
+    subgraph INPUT["2 · 事件入口"]
+        E[CLI 输入]
+        F[Lead 邮箱事件]
+        G[到期 Cron Job]
+        H[持久化 Cron Queue]
+        G --> H
+    end
 
-    H --> I[内置工具]
-    H --> J[动态发现的 MCP 工具]
-    I --> K[工具结果]
-    J --> K
-    K --> D
+    subgraph LOOP["3 · Agent Lock 内的主循环"]
+        I[共享 Messages]
+        J[相关记忆检索]
+        K[Tool 输出预算<br/>与上下文压缩]
+        L[OpenAI-compatible 模型]
+        M[最终回复<br/>Stop Hook + 记忆提取]
+        N[PreToolUse 权限 Hook]
+        O[中央 Tool 注册表<br/>每轮刷新 Schema]
+        P[内置 Tools]
+        Q[带命名空间的 MCP Tools]
+        R[Tool Result]
 
-    I --> L[Tasks 与 Teammates]
-    L --> M[可选 Git Worktree]
-    M --> K
+        I --> J --> K --> L
+        L -->|无工具调用| M
+        L -->|工具调用| N --> O
+        O --> P
+        O --> Q
+        P --> R
+        Q --> R
+        R --> K
+    end
+
+    subgraph SERVICES["4 · 内置服务"]
+        S[后台 Shell]
+        T[Tasks + Teammate 邮箱]
+        U[经过校验的 Task Worktree]
+        V[Cron 创建 / 取消]
+        T --> U
+    end
+
+    D --> I
+    E --> I
+    F --> I
+    H --> I
+    P --> S
+    P --> T
+    P --> V
+    S --> R
+    U --> R
+    V --> R
+    I -. 已接入的生命周期事件 .-> W[有序 JSONL Trace]
 ```
 
-Runtime 启动时注册 Hooks、尝试发现 MCP 工具、扫描本地 Skills，并创建一份共享消息
-Session。每轮先检索相关记忆、控制工具输出体积并按需压缩上下文，再调用配置好的模型。
-工具调用经过权限 Hook 和中央注册表，执行结果追加到消息后进入下一轮模型调用。
+Runtime 启动时注册 Hooks、发现并动态注册 MCP Tools、扫描本地 Skills、创建共享消息
+Session，同时启动 Cron Poller 和 Queue Processor。CLI 输入、Lead 邮箱事件与到期 Cron
+Prompt 都在同一个 Agent Lock 下进入该 Session。每轮先检索相关记忆、控制 Tool 输出体积
+并按需压缩上下文，再调用配置好的模型。工具调用经过权限 Hook 和当前中央注册表，内置与
+MCP Tool 的结果随后返回下一轮模型调用；已接入的生命周期事件会写入有序 JSONL Trace。
 
 ## 快速开始
 
@@ -118,6 +161,19 @@ uv run python -m bareloop.mian
 按 `Enter` 发送，按 `Esc` + `Enter` 或 `Ctrl` + `J` 插入换行；输入 `q`、`quit` 或
 `exit` 退出。
 
+### 在 PyCharm 中交互运行
+
+BareLoop 使用 `prompt_toolkit`，因此 Run Console 需要模拟终端，交互输入和多行快捷键才能
+正常工作。打开 **Run → Edit Configurations**，新增或编辑一个 **Python** 配置，并设置：
+
+- **Module name：** `bareloop.mian`
+- **Working directory：** 项目根目录
+- **Python interpreter：** 项目中的 `.venv/bin/python`
+- **Environment files：** `.env`
+
+随后打开 **Modify options**，勾选 **Emulate terminal in output console**。对应 IDE 选项可参考
+[PyCharm Python Run Configuration 官方文档](https://www.jetbrains.com/help/pycharm/run-debug-configuration-python.html)。
+
 ### 运行内置 MCP Demo（可选）
 
 在另一个终端启动：
@@ -127,8 +183,9 @@ uv run python -m bareloop.mcp_integration.server
 ```
 
 服务默认位于 `http://127.0.0.1:8000/mcp`，提供 `add` 和 `current_time` 两个工具。
-BareLoop 先尝试本地地址，再尝试配置的 `MCP_REMOTE_URL`；两者都不可达时会降级启动，
-不会因为 MCP 缺失而退出。
+BareLoop 先尝试本地地址，再尝试配置的 `MCP_REMOTE_URL`；发现的工具会以
+`mcp__demo__add` 这类名称动态注册。两者都不可达时会降级启动，不会因为 MCP 缺失而退出。
+携带 `MCP_REMOTE_TOKEN` 的远程地址必须使用 HTTPS，本地 Loopback 地址仍可使用 HTTP。
 
 ## 配置
 
@@ -184,9 +241,9 @@ uv build
 
 ## 项目状态
 
-`0.1.0` 建立了实验性 Runtime 的基础界面。核心循环和大部分支撑模块已经存在，但 Cron
-执行、Goal/Session 编排、完整事件追踪、跨平台支持及 Public API 稳定性仍在开发中。
-现阶段请以源码和测试作为行为契约。
+`0.1.0` 建立了实验性 Runtime 的基础界面。核心循环和大部分支撑模块已经存在，其中包括
+共享 Session 下带重试处理的 Cron 投递。Goal/Session 编排、完整事件追踪、跨平台支持及
+Public API 稳定性仍在开发中。现阶段请以源码和测试作为行为契约。
 
 ## License
 
