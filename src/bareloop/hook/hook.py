@@ -1,8 +1,15 @@
 from pathlib import Path
 
 from bareloop.settings import DENY_LIST, DESTRUCTIVE, WORKDIR
+from bareloop.goal import stop_goal_gate
 
-HOOKS = {"PreUserPromptInput": [], "PreToolUse": [], "PostToolUse": [], "Stop": []}
+HOOKS = {
+    "PreUserPromptInput": [],
+    "PreToolUse": [],
+    "PostToolUse": [],
+    "StopGoalGate": [],
+    "Stop": []
+}
 
 
 def permission_hook(block):
@@ -71,4 +78,5 @@ def hook():
     registry_hook("PreUserPromptInput", context_inject_hook)
     registry_hook("PreToolUse", permission_hook)
     # registry_hook('PostToolUse', permission_hook)
+    registry_hook('StopGoalGate', stop_goal_gate)
     registry_hook("Stop", summary_hook)

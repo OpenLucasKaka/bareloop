@@ -59,14 +59,12 @@ def run_shell_process(
 def run_bash(
     command: str,
     cwd: str | Path | None = None,
-    shouldBack: bool = False,
 ) -> str:
-    del shouldBack
     return format_shell_result(*run_shell_process(command, cwd=cwd))
 
 
-def run_agent_bash(command: str, shouldBack: bool = False) -> str:
+def run_agent_bash(command: str) -> str:
     cwd, error = get_agent_cwd()
     if error:
         return error
-    return run_bash(command, cwd=cwd, shouldBack=shouldBack)
+    return run_bash(command, cwd=cwd)

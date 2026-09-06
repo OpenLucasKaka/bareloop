@@ -1,3 +1,5 @@
+#初版作为hook的来实现
+
 from dataclasses import dataclass
 from typing import Any
 
@@ -28,3 +30,7 @@ class GoalController:
         self.active: GoalState | None = None
         self.last_status: dict[str, Any] | None = None
         self.consecutive_blocks = 0
+
+
+def stop_goal_gate():
+    pass

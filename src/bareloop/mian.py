@@ -8,6 +8,7 @@ os.environ["HF_HUB_VERBOSITY"] = "error"
 
 for logger_name in (
     "httpx2",
+    "httpx",
     "httpcore",
     "mcp",
     "transformers",
@@ -53,11 +54,6 @@ def build_system():
         如果工作目录中没有用户需要的普通文件，可以查找工作区之外的目录。
         """
 
-
-def create_session():
-    pass
-
-
 async def wait_for_cli_event():
     prompt_task = asyncio.create_task(PROMPT_SESSION.prompt_async("请输入> "))
     try:
@@ -77,7 +73,7 @@ async def wait_for_cli_event():
     return "user", content
 
 
-def init_agent():
+def create_session():
     # 注册hooks
     init_hooks()
     # 启动mcp
@@ -123,4 +119,4 @@ def init_agent():
 
 
 if __name__ == "__main__":
-    init_agent()
+    create_session()

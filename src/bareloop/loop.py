@@ -3,6 +3,7 @@ from typing import Any
 from bareloop.background_system import inject_background_results
 from bareloop.compact import CONTEXT_LIMIT, compact_history, micro_compact, tool_budget_result
 from bareloop.cron_scheduler import acknowledge_cron_jobs, consume_cron_queue, restore_cron_jobs
+from bareloop.goal.model import stop_goal_gate
 from bareloop.hook import trigger_hook
 from bareloop.memory import consolidate_memories, extract_memories, load_memories
 from bareloop.settings import PRIMARY_MODEL, client, tokenizer
@@ -117,6 +118,18 @@ def _run_agent_loop(
             ]
         messages.append(assistant_message)
         if not message.tool_calls:
+            # decision = trigger_hook('StopGoalGate', messages)
+            # # goal evalator评估后未完成目标
+            # if decision and decision.action == 'block':
+            #     messages.append({
+            #         "role": "user",
+            #         "content": (
+            #             f"[Goal still active]\n"
+            #             f"Evaluator: {decision.reason}\n"
+            #             "Continue working."
+            #         ),
+            #     })
+            #     continue
             tool_count = trigger_hook("Stop", messages)
             print(message.content)
             if tool_count:
