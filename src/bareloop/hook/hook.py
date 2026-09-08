@@ -1,14 +1,14 @@
 from pathlib import Path
 
-from bareloop.settings import DENY_LIST, DESTRUCTIVE, WORKDIR
 from bareloop.goal import stop_goal_gate
+from bareloop.settings import DENY_LIST, DESTRUCTIVE, WORKDIR
 
 HOOKS = {
     "PreUserPromptInput": [],
     "PreToolUse": [],
     "PostToolUse": [],
     "StopGoalGate": [],
-    "Stop": []
+    "Stop": [],
 }
 
 
@@ -45,11 +45,6 @@ def permission_hook(block):
     return None
 
 
-def context_inject_hook(quey):
-    print(f"\033[90m[CWD]: {WORKDIR}\033[0m")
-    return None
-
-
 def summary_hook(messages: list):
     count = 0
     for m in messages:
@@ -75,8 +70,7 @@ def registry_hook(event: str, callback):
 
 
 def hook():
-    registry_hook("PreUserPromptInput", context_inject_hook)
     registry_hook("PreToolUse", permission_hook)
     # registry_hook('PostToolUse', permission_hook)
-    registry_hook('StopGoalGate', stop_goal_gate)
+    registry_hook("StopGoalGate", stop_goal_gate)
     registry_hook("Stop", summary_hook)

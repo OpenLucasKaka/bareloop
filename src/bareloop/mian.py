@@ -3,6 +3,8 @@ import logging
 import os
 from contextlib import suppress
 
+from prompt_toolkit.shortcuts import radiolist_dialog
+
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["HF_HUB_VERBOSITY"] = "error"
 
@@ -22,7 +24,8 @@ from bareloop.hook import hook as init_hooks  # noqa: E402
 from bareloop.hook import trigger_hook  # noqa: E402
 from bareloop.loop import agent_loop  # noqa: E402
 from bareloop.mcp_integration import mcp_init  # noqa: E402
-from bareloop.settings import PROMPT_SESSION, WORKDIR  # noqa: E402
+from bareloop.mode import AgentMode  # noqa: E402
+from bareloop.settings import CLI_STYLE, PROMPT_SESSION, WORKDIR, DEFAUlT_MODEL  # noqa: E402
 from bareloop.skills import _scan_skills, list_skills  # noqa: E402
 from bareloop.trace import TraceWriter  # noqa: E402
 from bareloop.utils import format_team_events  # noqa: E402
@@ -32,11 +35,12 @@ def run_agent_turn_locked(
     messages,
     tw: TraceWriter,
     user_input: str | None = None,
+    mode: AgentMode = AgentMode.NORMAL,
 ):
     if user_input is not None:
         trigger_hook("PreUserPromptInput", user_input)
         messages.append({"role": "user", "content": user_input})
-    agent_loop(messages, tw)
+    agent_loop(messages, tw, mode)
 
 
 def build_system():
@@ -54,23 +58,50 @@ def build_system():
         如果工作目录中没有用户需要的普通文件，可以查找工作区之外的目录。
         """
 
-async def wait_for_cli_event():
-    prompt_task = asyncio.create_task(PROMPT_SESSION.prompt_async("请输入> "))
+
+async def wait_for_cli_event(selected_mode: AgentMode = DEFAUlT_MODEL):
+    toolbar = (
+        [("class:mode.goal", "  Goal mode · /mode 切换")]
+        if selected_mode is AgentMode.GOAL
+        else [("class:hint", "  /mode 切换")]
+    )
+    toolbar.append(("class:hint", f" · {WORKDIR}"))
+    prompt_task = asyncio.create_task(
+        PROMPT_SESSION.prompt_async(
+            "› ",
+            placeholder=[("class:placeholder", "请输入内容")],
+            bottom_toolbar=toolbar,
+            style=CLI_STYLE,
+        )
+    )
     try:
         while not prompt_task.done():
             if BUS.peek("lead"):
                 prompt_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await prompt_task
-                return "wake", None
+                return "wake", None, selected_mode
             await asyncio.sleep(0.25)
 
         content = await prompt_task
+        if content == "/mode":
+            new_mode = await radiolist_dialog(
+                title="Select mode",
+                text="Choose execution mode",
+                values=[
+                    (AgentMode.NORMAL, "normal"),
+                    (AgentMode.GOAL, "goal"),
+                ],
+                default=selected_mode,
+            ).run_async()
+            if new_mode is not None:
+                selected_mode = new_mode
+            return "next", None, selected_mode
     except (EOFError, KeyboardInterrupt):
-        return "quit", None
+        return "quit", None, selected_mode
     if content in {"quit", "q", "exit"}:
-        return "quit", None
-    return "user", content
+        return "quit", None, selected_mode
+    return "user", content, selected_mode
 
 
 def create_session():
@@ -81,18 +112,21 @@ def create_session():
     # 扫描skill
     _scan_skills()
     had_teammates = False
-    TW = TraceWriter()
+    tw = TraceWriter()
     print("输入问题，回车发送。输入 q 退出。\n")
     messages = [{"role": "system", "content": build_system()}]
     # cron 与 CLI 共用同一份会话和 trace，避免定时任务丢失上下文。
-    start_cron_scheduler(messages, TW)
+    start_cron_scheduler(messages, tw)
+    mode = DEFAUlT_MODEL
     while True:
         try:
-            kind, input_prompt = asyncio.run(wait_for_cli_event())
+            kind, input_prompt, mode = asyncio.run(wait_for_cli_event(mode))
+            if kind == "next":
+                continue
             if kind == "user":
-                TW.write(event_type="用户输入", data=input_prompt)
+                tw.write(event_type="用户输入", data=input_prompt)
             if kind == "quit":
-                TW.write(event_type="停止对话")
+                tw.write(event_type="停止对话")
                 break
             if kind == "wake":
                 inbox = consume_lead_inbox()
@@ -108,7 +142,7 @@ def create_session():
         except (EOFError, KeyboardInterrupt):
             break
         with agent_lock:
-            run_agent_turn_locked(messages, TW, input_prompt)
+            run_agent_turn_locked(messages, tw, input_prompt, mode)
         if active_teammates:
             had_teammates = True
         if not input_prompt:

@@ -6,7 +6,10 @@ from openai import OpenAI
 from prompt_toolkit import PromptSession
 from prompt_toolkit.filters import to_filter
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.styles import Style
 from transformers import AutoTokenizer
+
+from bareloop.mode import AgentMode
 
 WORKDIR = Path.cwd().resolve()
 
@@ -17,7 +20,7 @@ FALLBACK_MODEL = os.getenv("FALLBACK_MODEL")
 CODE_MODEL = os.getenv("CODE_MODEL")
 MLX_MODEL = os.getenv("MLX_MODEL")
 TOKENIZER_MODEL = os.getenv("TOKENIZER_MODEL")
-
+DEFAUlT_MODEL = AgentMode.NORMAL
 
 RED = "\033[31m"
 GREEN = "\033[32m"
@@ -30,6 +33,16 @@ BOLD = "\033[1m"
 client = OpenAI(
     api_key=os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY") or "bareloop-unconfigured",
     base_url=os.getenv("BASE_URL") or None,
+)
+
+CLI_STYLE = Style.from_dict(
+    {
+        "bottom-toolbar": "noreverse",
+        "bottom-toolbar.text": "",
+        "mode.goal": "fg:ansimagenta bold",
+        "hint": "fg:ansibrightblack",
+        "placeholder": "fg:ansibrightblack",
+    }
 )
 
 

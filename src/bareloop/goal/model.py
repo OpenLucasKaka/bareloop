@@ -1,7 +1,11 @@
-#初版作为hook的来实现
+# 初版作为hook的来实现
 
 from dataclasses import dataclass
 from typing import Any
+
+from bareloop.settings import PRIMARY_MODEL, client
+
+# from bareloop.settings import client, FALLBACK_MODEL
 
 DEFAULT_STOP_HOOK_BLOCK_CAP = 8
 
@@ -32,5 +36,8 @@ class GoalController:
         self.consecutive_blocks = 0
 
 
-def stop_goal_gate():
+def stop_goal_gate(messages):
+    client.chat.completions.create(
+        model=PRIMARY_MODEL,
+    )
     pass

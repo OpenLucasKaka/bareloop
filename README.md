@@ -138,6 +138,12 @@ then return to the next model round. Selected lifecycle events are written to or
 - [uv](https://docs.astral.sh/uv/)
 - An OpenAI-compatible API endpoint and a tokenizer available to Transformers
 
+Durable memory additionally requires the configured endpoint/model to support
+strict function calling with named `tool_choice` and Structured Outputs using
+`response_format: {type: json_schema}`. If those capabilities are unavailable,
+the agent loop continues but the affected memory extraction or consolidation is
+skipped with a visible error; it never falls back to parsing free-form output.
+
 ### Install
 
 ```bash
