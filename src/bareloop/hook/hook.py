@@ -11,7 +11,7 @@ HOOKS = {
     "Stop": [],
 }
 
-
+# 无状态、单次调用级 HITL
 def permission_hook(block):
     arguments = block["arguments"]
     if block["name"] == "bash":
