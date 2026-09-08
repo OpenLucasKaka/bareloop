@@ -3,12 +3,15 @@ import logging
 import os
 from contextlib import suppress
 
+from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import radiolist_dialog
 
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["HF_HUB_VERBOSITY"] = "error"
 
 for logger_name in (
+    #重试info会导致挤占思考loading 导致出现多行
+    "openai",
     "httpx2",
     "httpx",
     "httpcore",
@@ -60,12 +63,19 @@ def build_system():
 
 
 async def wait_for_cli_event(selected_mode: AgentMode = DEFAUlT_MODEL):
+    # 拦截后台的 stdout/stderr 避免后台任务打印覆盖
+    with patch_stdout(raw=True):
+        return await _wait_for_cli_event(selected_mode)
+
+
+async def _wait_for_cli_event(selected_mode: AgentMode):
     toolbar = (
         [("class:mode.goal", "  Goal mode · /mode 切换")]
         if selected_mode is AgentMode.GOAL
         else [("class:hint", "  /mode 切换")]
     )
     toolbar.append(("class:hint", f" · {WORKDIR}"))
+    toolbar.insert(0, ("", "\n\n\n\n"))
     prompt_task = asyncio.create_task(
         PROMPT_SESSION.prompt_async(
             "› ",
@@ -113,10 +123,10 @@ def create_session():
     _scan_skills()
     had_teammates = False
     tw = TraceWriter()
-    print("输入问题，回车发送。输入 q 退出。\n")
     messages = [{"role": "system", "content": build_system()}]
     # cron 与 CLI 共用同一份会话和 trace，避免定时任务丢失上下文。
     start_cron_scheduler(messages, tw)
+    print("输入问题，回车发送。输入 q 退出。\n")
     mode = DEFAUlT_MODEL
     while True:
         try:

@@ -187,6 +187,37 @@ def test_create_session_starts_with_configured_default_mode(
     assert received_modes == [mian.DEFAUlT_MODEL]
 
 
+def test_cli_prompt_protects_input_from_background_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import contextmanager
+
+    from bareloop import mian
+
+    events = []
+
+    @contextmanager
+    def fake_patch_stdout(*, raw: bool = False):
+        events.append(("enter", raw))
+        try:
+            yield
+        finally:
+            events.append(("exit", raw))
+
+    async def prompt_async(_prompt: str, **_options) -> str:
+        assert events == [("enter", True)]
+        return "quit"
+
+    monkeypatch.setattr(mian.PROMPT_SESSION, "prompt_async", prompt_async)
+    monkeypatch.setattr(mian.BUS, "peek", lambda _recipient: [])
+    monkeypatch.setattr(mian, "patch_stdout", fake_patch_stdout, raising=False)
+
+    result = asyncio.run(mian.wait_for_cli_event(mian.AgentMode.NORMAL))
+
+    assert result == ("quit", None, mian.AgentMode.NORMAL)
+    assert events == [("enter", True), ("exit", True)]
+
+
 def test_cli_mode_command_can_switch_back_to_normal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -402,6 +433,7 @@ def test_cron_only_turn_does_not_extract_previous_assistant_as_evidence(
     ]
 
     loop.agent_loop(messages, SimpleNamespace(write=lambda **_: None))
+    loop.wait_for_memory_maintenance()
 
     assert extracted == [
         (
@@ -589,6 +621,7 @@ def test_agent_loop_extracts_memories_from_turn_buffer_after_compaction(
         SimpleNamespace(write=lambda **_: None),
         loop.AgentMode.NORMAL,
     )
+    loop.wait_for_memory_maintenance()
 
     assert len(compact_calls) == 2
     assert all(message.get("content") != "original current request" for message in messages)
@@ -611,6 +644,79 @@ def test_agent_loop_extracts_memories_from_turn_buffer_after_compaction(
         {"role": "tool", "tool_call_id": "call_one", "content": "tool output"},
         {"role": "assistant", "content": "finished"},
     ]
+
+
+def test_agent_loop_schedules_memory_maintenance_without_blocking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from copy import deepcopy
+    from types import SimpleNamespace
+
+    from bareloop import loop
+
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="done", tool_calls=None))]
+    )
+    scheduled = []
+
+    monkeypatch.setattr(loop, "consume_cron_queue", lambda: [])
+    monkeypatch.setattr(loop, "load_memories", lambda _messages: "")
+    monkeypatch.setattr(loop, "inject_background_results", lambda _messages: None)
+    monkeypatch.setattr(loop, "tool_budget_result", lambda messages: messages)
+    monkeypatch.setattr(loop, "micro_compact", lambda messages: messages)
+    monkeypatch.setattr(loop, "get_tool_schemas", lambda: [])
+    monkeypatch.setattr(loop, "trigger_hook", lambda *_args: None)
+    monkeypatch.setattr(
+        loop,
+        "tokenizer",
+        SimpleNamespace(apply_chat_template=lambda *_args, **_kwargs: []),
+    )
+    monkeypatch.setattr(
+        loop.client,
+        "chat",
+        SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: response)),
+    )
+    monkeypatch.setattr(
+        loop,
+        "schedule_memory_maintenance",
+        lambda turn: scheduled.append(deepcopy(turn)),
+        raising=False,
+    )
+
+    def fail_if_called_inline(*_args, **_kwargs):
+        raise AssertionError("memory maintenance must not run inline")
+
+    monkeypatch.setattr(loop, "extract_memories", fail_if_called_inline)
+    monkeypatch.setattr(loop, "consolidate_memories", fail_if_called_inline)
+
+    loop.agent_loop(
+        [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "question"},
+        ],
+        SimpleNamespace(write=lambda **_: None),
+    )
+
+    assert scheduled == [
+        [
+            {"role": "user", "content": "question"},
+            {"role": "assistant", "content": "done"},
+        ]
+    ]
+
+
+def test_memory_maintenance_skips_consolidation_without_changes() -> None:
+    from bareloop import loop
+
+    consolidated = []
+
+    loop._maintain_memories(
+        [],
+        lambda _messages, _count: None,
+        lambda: consolidated.append(True),
+    )
+
+    assert consolidated == []
 
 
 def test_agent_loop_reinjects_relevant_memories_after_compaction(
