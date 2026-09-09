@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -15,7 +17,17 @@ from bareloop.task_system import (
 )
 from bareloop.task_system import model as task_model
 
-WORKTREE_DIR = (WORKDIR / ".bareloop" / ".worktrees").resolve()
+# 区分全局状态和项目状态, 将worktree移到全局 也可避免误测和误扫
+def _default_worktree_dir(workdir: Path) -> Path:
+    configured_home = os.getenv("BARELOOP_HOME")
+    bareloop_home = (
+        Path(configured_home).expanduser() if configured_home else Path.home() / ".bareloop"
+    )
+    repo_id = hashlib.sha256(str(workdir.resolve()).encode("utf-8")).hexdigest()[:12]
+    return (bareloop_home / "worktrees" / repo_id).resolve()
+
+
+WORKTREE_DIR = _default_worktree_dir(WORKDIR)
 WORKTREE_DIR_MATCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 teammate_assignment_info: dict[str, dict[str, object]] = {}
 

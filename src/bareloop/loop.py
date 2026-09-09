@@ -17,7 +17,7 @@ from bareloop.trace import TraceWriter
 from bareloop.utils import normalize_tool_call
 
 _MEMORY_MAINTENANCE_EXECUTOR = ThreadPoolExecutor(
-    max_workers=1,
+    max_workers=1,# 避免多个worker同时修改memory
     thread_name_prefix="bareloop-memory",
 )
 
@@ -34,6 +34,7 @@ def _maintain_memories(
 def schedule_memory_maintenance(
     turn_messages: list[dict[str, Any]],
 ) -> Future[None]:
+    # 让 memory extraction 在后台线程执行
     return _MEMORY_MAINTENANCE_EXECUTOR.submit(
         _maintain_memories,
         deepcopy(turn_messages),
@@ -107,16 +108,17 @@ def _run_agent_loop(
 
     while True:
         try:
+            memory_messages = messages.copy()
+            message_count = len(messages)
+            inject_background_results(messages)
+            turn_messages.extend(deepcopy(messages[message_count:]))
             with ModelLoading():
                 if first_round:
                     # 耗时记忆召回 成熟方案是通过本地检索 目前是通过llm调用
                     # 避免处理两个ModelLoading 将召回记忆放到循环中, 并用标识避免多次调用
-                    memories_content = load_memories(messages)
+                    memories_content = load_memories(memory_messages)
                     tw.write(event_type="提取相关记忆", data=memories_content)
                     first_round = False
-                message_count = len(messages)
-                inject_background_results(messages)
-                turn_messages.extend(deepcopy(messages[message_count:]))
                 if rounds_since_todo >= 3 and messages:
                     rounds_since_todo = 0
                     messages.append(

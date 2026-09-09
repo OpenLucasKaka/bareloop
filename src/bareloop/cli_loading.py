@@ -10,7 +10,7 @@ class ModelLoading:
 
     def __init__(
         self,
-        text: str = "正在思考…",
+        text: str = "thinking…",
         *,
         stream: TextIO | None = None,
         interval: float = 0.08,

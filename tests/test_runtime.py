@@ -395,6 +395,69 @@ def test_agent_loop_acknowledges_delivered_cron(
     assert restored == []
 
 
+def test_background_results_are_collected_before_loading_starts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from bareloop import loop
+
+    events = []
+    memory_inputs = []
+
+    class RecordingLoading:
+        def __enter__(self):
+            events.append("loading-enter")
+            return self
+
+        def __exit__(self, *_args):
+            events.append("loading-exit")
+
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="done", tool_calls=None))]
+    )
+
+    def collect(messages):
+        events.append("collect")
+        messages.append({"role": "user", "content": "background notification"})
+
+    def load_memories(messages):
+        memory_inputs.append([dict(message) for message in messages])
+        return ""
+
+    monkeypatch.setattr(loop, "ModelLoading", RecordingLoading)
+    monkeypatch.setattr(loop, "load_memories", load_memories)
+    monkeypatch.setattr(loop, "inject_background_results", collect)
+    monkeypatch.setattr(loop, "tool_budget_result", lambda messages: messages)
+    monkeypatch.setattr(loop, "micro_compact", lambda messages: messages)
+    monkeypatch.setattr(loop, "get_tool_schemas", lambda: [])
+    monkeypatch.setattr(loop, "trigger_hook", lambda *_args: None)
+    monkeypatch.setattr(loop, "schedule_memory_maintenance", lambda _messages: None)
+    monkeypatch.setattr(
+        loop,
+        "tokenizer",
+        SimpleNamespace(apply_chat_template=lambda *_args, **_kwargs: []),
+    )
+    monkeypatch.setattr(
+        loop.client,
+        "chat",
+        SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: response)),
+    )
+
+    loop._run_agent_loop(
+        [{"role": "system", "content": "system"}],
+        SimpleNamespace(write=lambda **_: None),
+        [],
+        [],
+        [],
+        {"accepted": False},
+        loop.AgentMode.NORMAL,
+    )
+
+    assert events == ["collect", "loading-enter", "loading-exit"]
+    assert memory_inputs == [[{"role": "system", "content": "system"}]]
+
+
 def test_cron_only_turn_does_not_extract_previous_assistant_as_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1091,10 +1154,7 @@ def test_memory_extraction_forces_tool_and_supplies_complete_context(
 
     request = calls[0]
     assert request["tools"] == [MEMORY_DECISION_TOOL]
-    assert request["tool_choice"] == {
-        "type": "function",
-        "function": {"name": "decide_memories"},
-    }
+    assert request["tool_choice"] == "required"
     assert request["parallel_tool_calls"] is False
     assert request["max_completion_tokens"] == 2000
     assert "max_tokens" not in request

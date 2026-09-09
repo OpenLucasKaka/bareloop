@@ -35,9 +35,7 @@ def git_task_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Pat
     monkeypatch.setattr(task_model, "_task_store_state", threading.local())
     monkeypatch.setattr(task_utils, "TASK", store)
     monkeypatch.setattr(worktree_index, "WORKDIR", repo.resolve())
-    monkeypatch.setattr(
-        worktree_index, "WORKTREE_DIR", (repo / ".bareloop" / ".worktrees").resolve()
-    )
+    monkeypatch.setattr(worktree_index, "WORKTREE_DIR", (tmp_path / "worktrees").resolve())
     real_run_git = worktree_index._run_git
     monkeypatch.setattr(
         worktree_index,
@@ -59,6 +57,23 @@ def test_validate_worktree_name_rejects_unsafe_names(name: object) -> None:
 @pytest.mark.parametrize("name", ["feature", "feature-1", "A_b.c"])
 def test_validate_worktree_name_accepts_safe_names(name: str) -> None:
     assert worktree_index.validate_worktree_name(name) is None
+
+
+def test_default_worktree_dir_is_external_and_repo_scoped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bareloop_home = tmp_path / "bareloop-home"
+    repo_a = tmp_path / "projects" / "a"
+    repo_b = tmp_path / "projects" / "b"
+    monkeypatch.setenv("BARELOOP_HOME", str(bareloop_home))
+
+    path_a = worktree_index._default_worktree_dir(repo_a)
+    path_b = worktree_index._default_worktree_dir(repo_b)
+
+    assert path_a.parent == (bareloop_home / "worktrees").resolve()
+    assert len(path_a.name) == 12
+    assert path_a != path_b
+    assert not path_a.is_relative_to(repo_a)
 
 
 def test_task_worktree_cwd_returns_a_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -89,7 +104,7 @@ def test_create_worktree_binds_task_in_real_git_repository(
 
     result = worktree_index.create_worktree("feature", task.id)
 
-    checkout = repo / ".bareloop" / ".worktrees" / "feature"
+    checkout = worktree_index.WORKTREE_DIR / "feature"
     assert result == f"Worktree 'feature' created at {checkout} for task {task.id}"
     assert checkout.is_dir()
     assert task_utils.load_task(task.id).worktree == "feature"
@@ -120,7 +135,7 @@ def test_create_worktree_rolls_back_if_task_binding_fails(
     monkeypatch.setattr(worktree_index, "save_task", fail_save)
     result = worktree_index.create_worktree("rollback", task.id)
 
-    checkout = repo / ".bareloop" / ".worktrees" / "rollback"
+    checkout = worktree_index.WORKTREE_DIR / "rollback"
     assert result.startswith("Error: Could not bind worktree 'rollback'")
     assert not checkout.exists()
     assert _git(repo, "branch", "--list", "wt/rollback") == ""
