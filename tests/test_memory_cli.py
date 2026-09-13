@@ -24,14 +24,14 @@ def test_memory_schema_definitions():
     )
     
     # Test memory types
-    assert isinstance(MEMORY_TYPES, frozenset)
+    assert isinstance(MEMORY_TYPES, list)
     assert "user" in MEMORY_TYPES
     assert "feedback" in MEMORY_TYPES
     assert "project" in MEMORY_TYPES
     assert "reference" in MEMORY_TYPES
     
     # Test persistent memory bases
-    assert isinstance(PERSISTENT_MEMORY_BASES, frozenset)
+    assert isinstance(PERSISTENT_MEMORY_BASES, list)
     assert len(PERSISTENT_MEMORY_BASES) > 0
 
 
@@ -80,8 +80,8 @@ def test_memory_index_functions():
     assert 'messages' in load_sig.parameters
     
     extract_sig = inspect.signature(extract_memories)
-    assert 'turn_messages' in extract_sig.parameters
-    assert 'message_index' in extract_sig.parameters
+    assert "messages" in extract_sig.parameters
+    assert "count" in extract_sig.parameters
     
     consolidate_sig = inspect.signature(consolidate_memories)
     # consolidate_memories should have no required parameters

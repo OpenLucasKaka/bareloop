@@ -1,0 +1,9 @@
+id: discover-and-copy
+prompt: >-
+  Use glob to locate the only file named payload.txt below inputs, read it, and create result.txt
+  whose complete contents exactly match that payload with no trailing newline.
+max_rounds: 8
+graders:
+  - type: file_equals
+    path: result.txt
+    expected: "bareloop-stable"

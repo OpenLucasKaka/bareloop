@@ -1,0 +1,12 @@
+id: multi-file-update
+prompt: >-
+  Read alpha.txt and beta.txt. Use edit operations so alpha.txt contains exactly alpha=new and
+  beta.txt contains exactly beta=new, preserving each trailing newline.
+max_rounds: 8
+graders:
+  - type: file_equals
+    path: alpha.txt
+    expected: "alpha=new\n"
+  - type: file_equals
+    path: beta.txt
+    expected: "beta=new\n"

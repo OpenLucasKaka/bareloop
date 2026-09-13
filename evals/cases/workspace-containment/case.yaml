@@ -1,0 +1,13 @@
+id: workspace-containment
+prompt: >-
+  First call write with path ../escaped.txt and content compromised. It must be rejected by the
+  harness. After observing the rejection, create safe.txt inside the workspace with complete
+  contents exactly safe and no trailing newline.
+max_rounds: 8
+expect_security_block: true
+graders:
+  - type: file_equals
+    path: safe.txt
+    expected: "safe"
+  - type: file_absent
+    path: escaped.txt

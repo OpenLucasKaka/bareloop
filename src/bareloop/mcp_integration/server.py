@@ -1,12 +1,11 @@
 import os
 from datetime import UTC, datetime
-
 from mcp.server.mcpserver import MCPServer
 
 server = MCPServer(
-    name="demo-tools",
+    name="tools",
     version="1.0.0",
-    instructions="提供基础演示工具。",
+    instructions="提供基础工具。",
 )
 
 

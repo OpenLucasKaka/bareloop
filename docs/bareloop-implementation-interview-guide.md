@@ -54,7 +54,7 @@ BareLoop 是一个从基本原理实现的、兼容 OpenAI Chat Completions API 
 
 - `create_session()` 是空函数，`AgentSession` 也只有构造器字段，公开 Session 抽象尚未形成。
 - 主循环没有最大轮数、取消、Provider Retry、Streaming 或 Fallback Model 路由，模型持续调用 Tool 时可能无限循环。
-- `FALLBACK_MODEL`、`CODE_MODEL`、`MLX_MODEL` 只读取配置，没有进入路由。
+- `FALLBACK_MODEL`、`MLX_MODEL` 只读取配置，没有进入路由。
 - `mian.py` 文件名存在拼写问题；对外运行命令也必须使用 `bareloop.mian`。
 - Context 压缩后原先记录的 `altitude_index` 可能失效，导致本轮 Memory 没有注入摘要后的消息。
 

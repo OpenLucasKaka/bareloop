@@ -20,7 +20,6 @@ def test_task_modules_import_without_local_model_configuration(tmp_path) -> None
         "BASE_URL",
         "PRIMARY_MODEL",
         "FALLBACK_MODEL",
-        "CODE_MODEL",
         "MLX_MODEL",
         "TOKENIZER_MODEL",
     ):

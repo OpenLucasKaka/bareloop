@@ -17,7 +17,6 @@ load_dotenv()
 
 PRIMARY_MODEL = os.getenv("PRIMARY_MODEL")
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL")
-CODE_MODEL = os.getenv("CODE_MODEL")
 MLX_MODEL = os.getenv("MLX_MODEL")
 TOKENIZER_MODEL = os.getenv("TOKENIZER_MODEL")
 DEFAUlT_MODEL = AgentMode.NORMAL

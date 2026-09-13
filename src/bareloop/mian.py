@@ -10,8 +10,7 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["HF_HUB_VERBOSITY"] = "error"
 
 for logger_name in (
-    #重试info会导致挤占思考loading 导致出现多行
-    "openai",
+    "openai", # 重试info会导致挤占思考loading 导致出现多行
     "httpx2",
     "httpx",
     "httpcore",
@@ -23,6 +22,7 @@ for logger_name in (
 
 from bareloop.agent_team import BUS, active_teammates, consume_lead_inbox  # noqa: E402
 from bareloop.cron_scheduler import agent_lock, start_cron_scheduler  # noqa: E402
+from bareloop.goal import GoalController, create_goal_controller  # noqa: E402
 from bareloop.hook import hook as init_hooks  # noqa: E402
 from bareloop.hook import trigger_hook  # noqa: E402
 from bareloop.loop import agent_loop  # noqa: E402
@@ -39,11 +39,14 @@ def run_agent_turn_locked(
     tw: TraceWriter,
     user_input: str | None = None,
     mode: AgentMode = AgentMode.NORMAL,
+    goal_controller: GoalController | None = None,
 ):
     if user_input is not None:
-        trigger_hook("PreUserPromptInput", user_input)
+        # trigger_hook("PreUserPromptInput", user_input)
+        if mode == AgentMode.GOAL and goal_controller is not None:
+            goal_controller.accept_user_input(user_input)
         messages.append({"role": "user", "content": user_input})
-    agent_loop(messages, tw, mode)
+    agent_loop(messages, tw, mode, goal_controller)
 
 
 def build_system():
@@ -115,22 +118,27 @@ async def _wait_for_cli_event(selected_mode: AgentMode):
 
 
 def create_session():
-    # 注册hooks
-    init_hooks()
-    # 启动mcp
-    asyncio.run(mcp_init())
-    # 扫描skill
-    _scan_skills()
-    had_teammates = False
+    init_hooks() # 注册hooks
+    asyncio.run(mcp_init()) # 启动mcp
+    _scan_skills() # 扫描skill
+    had_teammates = False # 用于记录是否启动过teammate
     tw = TraceWriter()
+    goal_controller = create_goal_controller()
     messages = [{"role": "system", "content": build_system()}]
-    # cron 与 CLI 共用同一份会话和 trace，避免定时任务丢失上下文。
-    start_cron_scheduler(messages, tw)
+    start_cron_scheduler(messages, tw) # cron 与 CLI 共用同一份会话和 trace，避免定时任务丢失上下文。
     print("输入问题，回车发送。输入 q 退出。\n")
     mode = DEFAUlT_MODEL
     while True:
         try:
+            previous_mode = mode
             kind, input_prompt, mode = asyncio.run(wait_for_cli_event(mode))
+
+            if mode != previous_mode:
+                if mode == AgentMode.GOAL:
+                    goal_controller.enter_goal_mode()
+                else:
+                    goal_controller.leave_goal_mode()
+
             if kind == "next":
                 continue
             if kind == "user":
@@ -148,16 +156,17 @@ def create_session():
                         "content": format_team_events(inbox),
                     }
                 )
-                print(f"[wake: {len(inbox)} team event(s) -> new turn]")
+                print(f"[Cron Wake: {len(inbox)} team event(s) -> new turn]")
         except (EOFError, KeyboardInterrupt):
             break
+
         with agent_lock:
-            run_agent_turn_locked(messages, tw, input_prompt, mode)
+            run_agent_turn_locked(messages, tw, input_prompt, mode, goal_controller)
         if active_teammates:
             had_teammates = True
         if not input_prompt:
             continue
-        elif had_teammates and not BUS.peek("lead"):
+        elif had_teammates and not BUS.peek("lead") and active_teammates: # 启动过teammate 并且lead的邮箱中没有待处理任务、没有活跃的teammate
             print("[all teammates shut down]")
             had_teammates = False
 

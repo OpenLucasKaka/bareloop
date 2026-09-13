@@ -211,7 +211,6 @@ endpoint carrying `MCP_REMOTE_TOKEN` must use HTTPS; loopback HTTP remains avail
 | `PRIMARY_MODEL` | Yes | Model used by the main loop and memory operations |
 | `TOKENIZER_MODEL` | Yes | Transformers tokenizer used to estimate context size |
 | `FALLBACK_MODEL` | No | Reserved fallback model identifier |
-| `CODE_MODEL` | No | Reserved coding model identifier |
 | `MLX_MODEL` | No | Reserved local MLX model identifier |
 | `MCP_LOCAL_URL` | No | Local MCP URL; defaults to `http://127.0.0.1:8000/mcp` |
 | `MCP_REMOTE_URL` | No | Remote MCP fallback URL |
@@ -255,6 +254,43 @@ The current test suite covers tool schemas and dispatch, tasks, team protocols, 
 integration, runtime helpers, and trace ordering. It does not replace live-provider or full CLI
 end-to-end testing.
 
+### Live harness stability Eval
+
+Run every deterministic case five times against all unique configured model IDs:
+
+```bash
+uv run python -m bareloop.eval \
+  --suite \
+  --all-configured-models \
+  --repetitions 5 \
+  --output-dir .bareloop/eval/runs/manual
+```
+
+Use repeatable `--model MODEL_ID` arguments to select an explicit compatibility matrix. Add
+`--pricing evals/model-pricing.yaml` to calculate cost from provider-reported token usage; copy
+`evals/model-pricing.example.yaml` and enter verified prices first. Missing Provider usage or prices
+remain unavailable rather than being estimated.
+
+Each run directory contains `report.json`, `runs.csv`, and a self-contained `report.html` with
+inline SVG charts. `task_success_rate` measures deterministic task completion;
+`harness_integrity_rate` separately measures internal and containment stability. Reports classify
+Provider errors, invalid Tool calls, round exhaustion, safety violations, harness errors, and
+recovered Tool errors. Five repetitions are exploratory, so p95 is not a production SLO.
+
+Compare with a prior immutable report using `--baseline PATH/report.json`. Live artifacts remain
+under ignored `.bareloop/`; promoting a baseline is an explicit reviewed action.
+
+To run the suite and refresh the README telemetry table and SVG chart in one command (requires the
+configured Provider models), use:
+
+```bash
+./scripts/update-telemetry-dashboard.sh
+```
+
+The command writes suite-local `telemetry.jsonl` next to the eval report, then updates the marked
+dashboard block and `docs/assets/telemetry-dashboard.svg`. Set `REPETITIONS` or `OUTPUT_DIR` to
+override the defaults.
+
 ## Project status
 
 Version `0.1.0` establishes the experimental runtime surface. The core loop and most supporting
@@ -265,3 +301,25 @@ the source and tests as the current contract.
 ## License
 
 BareLoop is released under the [MIT License](LICENSE).
+
+<!-- telemetry-dashboard:start -->
+### Runtime telemetry
+
+![Runtime telemetry dashboard](docs/assets/telemetry-dashboard.svg)
+
+| Metric | Value |
+| --- | --- |
+| Run count | 90 |
+| Completion rate | 66.7% |
+| Provider success rate | 86.8% |
+| Provider latency (mean / P50 / P95) | 1045.9 / 987.4 / 2065.8 ms |
+| Token usage (runs with provider usage) | 60 |
+| Input / output / total tokens | 173336 / 10927 / 184263 |
+| Tool calls (success rate) | 162 (87.0%) |
+| Tool errors / blocked / invalid | 11 / 10 / 0 |
+| Security blocks / safety violations | 10 / 0 |
+| Terminations | completed: 60, provider_error: 30 |
+| Last updated | 2026-09-13T12:52:09.615382+00:00 |
+
+_Generated from `.bareloop/eval/runs/20260913T124358Z/telemetry.jsonl`. Token totals include only records with provider-reported usage._
+<!-- telemetry-dashboard:end -->

@@ -12,10 +12,10 @@ def test_model_loading_initialization():
     
     # Test with default parameters
     loader = ModelLoading()
-    assert loader._text == "正在思考…"
+    assert loader._text == "thinking…"
     assert loader._stream == sys.stderr
     assert loader._interval == 0.08
-    assert loader._enabled is None  # Will be determined by isatty()
+    assert loader._enabled is sys.stderr.isatty()
     
     # Test with custom parameters
     custom_stream = StringIO()
@@ -44,9 +44,9 @@ def test_model_loading_context_manager():
     
     output = StringIO()
     
-    with ModelLoading(stream=output) as loader:
+    with ModelLoading(stream=output, enabled=True) as loader:
         # Inside the context, thread should be running (or started)
-        assert loader._enabled == True  # Assuming we're in a TTY environment
+        assert loader._enabled is True
     
     # After exiting, thread should be stopped and output cleared
     result = output.getvalue()
@@ -62,13 +62,13 @@ def test_model_loading_animation():
     
     output = StringIO()
     
-    with ModelLoading(stream=output, interval=0.01) as loader:
+    with ModelLoading(stream=output, interval=0.01, enabled=True):
         # Give it a moment to render a few frames
         time.sleep(0.05)
     
     result = output.getvalue()
     # Should contain animation frames
-    assert "正在思考…" in result
+    assert "thinking…" in result
 
 
 def test_cli_loading_frames():
@@ -99,8 +99,7 @@ def test_import_main_module():
         pytest.fail(f"Failed to import mian module: {e}")
 
 
-@pytest.mark.asyncio
-async def test_wait_for_cli_event_structure():
+def test_wait_for_cli_event_structure():
     """Test the structure of wait_for_cli_event function."""
     from bareloop.mian import wait_for_cli_event
     from bareloop.mode import AgentMode

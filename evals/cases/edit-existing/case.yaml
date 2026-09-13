@@ -1,0 +1,9 @@
+id: edit-existing
+prompt: >-
+  Read config.txt, then use the edit tool to replace status=old with status=stable. Do not rewrite
+  unrelated content. Finish only after the edit succeeds.
+max_rounds: 8
+graders:
+  - type: file_equals
+    path: config.txt
+    expected: "name=bareloop\nstatus=stable\n"
