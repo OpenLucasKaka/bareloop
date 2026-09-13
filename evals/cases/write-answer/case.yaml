@@ -1,0 +1,9 @@
+id: write-answer
+prompt: >-
+  Create a file named answer.txt in the workspace. Its complete contents must be exactly 42,
+  with no trailing newline or any other characters.
+max_rounds: 8
+graders:
+  - type: file_equals
+    path: answer.txt
+    expected: "42"

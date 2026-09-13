@@ -196,7 +196,6 @@ BareLoop 先尝试本地地址，再尝试配置的 `MCP_REMOTE_URL`；发现的
 | `PRIMARY_MODEL` | 是 | 主循环和记忆操作使用的模型 |
 | `TOKENIZER_MODEL` | 是 | Transformers Tokenizer，用于估算上下文大小 |
 | `FALLBACK_MODEL` | 否 | 预留的 Fallback Model 标识，目前未接入路由 |
-| `CODE_MODEL` | 否 | 预留的 Coding Model 标识，目前未接入路由 |
 | `MLX_MODEL` | 否 | 预留的本地 MLX Model 标识，目前未接入路由 |
 | `MCP_LOCAL_URL` | 否 | 本地 MCP 地址，默认 `http://127.0.0.1:8000/mcp` |
 | `MCP_REMOTE_URL` | 否 | 远程 MCP 备用地址 |
@@ -239,6 +238,41 @@ uv build
 当前测试覆盖 Tool Schema 与调度、Tasks、Team 协议、Worktree、MCP 集成、Runtime Helper
 以及 Trace 顺序；真实在线模型和完整 CLI 仍需要额外的端到端验证。
 
+### 真实 Harness 稳定性 Eval
+
+对所有已配置且去重后的模型运行全部确定性 case，每个 case 重复五次：
+
+```bash
+uv run python -m bareloop.eval \
+  --suite \
+  --all-configured-models \
+  --repetitions 5 \
+  --output-dir .bareloop/eval/runs/manual
+```
+
+也可以重复传入 `--model MODEL_ID` 指定兼容性矩阵。需要成本指标时，先复制
+`evals/model-pricing.example.yaml` 并填入已核实价格，再传入 `--pricing`。Token 必须来自
+Provider usage，缺失 usage 或价格时明确显示 unavailable，不使用估算值冒充正式数据。
+
+每次运行生成 `report.json`、`runs.csv` 和包含内联 SVG 统计图的独立 `report.html`。
+`task_success_rate` 衡量确定性任务完成情况，`harness_integrity_rate` 单独衡量内部执行与
+workspace containment 稳定性。报告区分 Provider 错误、无效 Tool 调用、轮数耗尽、安全
+违规、Harness 内部错误以及 Tool 错误后的恢复。五次重复属于探索性样本，p95 不能作为
+生产 SLO。
+
+使用 `--baseline PATH/report.json` 可与历史报告比较。真实运行产物保存在 Git 忽略的
+`.bareloop/` 下，baseline 只应在人工审查后显式提升。
+
+要一键运行完整 Suite，并自动刷新 README telemetry 表格和 SVG 图表（需要已配置的 Provider
+模型），执行：
+
+```bash
+./scripts/update-telemetry-dashboard.sh
+```
+
+脚本会把本次 Suite 的 `telemetry.jsonl` 写在评测报告目录旁，再更新 README 中的标记区块和
+`docs/assets/telemetry-dashboard.svg`。可通过 `REPETITIONS` 或 `OUTPUT_DIR` 覆盖默认值。
+
 ## 项目状态
 
 `0.1.0` 建立了实验性 Runtime 的基础界面。核心循环和大部分支撑模块已经存在，其中包括
@@ -248,3 +282,25 @@ Public API 稳定性仍在开发中。现阶段请以源码和测试作为行为
 ## License
 
 BareLoop 使用 [MIT License](LICENSE)。
+
+<!-- telemetry-dashboard:start -->
+### Runtime telemetry
+
+![Runtime telemetry dashboard](docs/assets/telemetry-dashboard.svg)
+
+| Metric | Value |
+| --- | --- |
+| Run count | 0 |
+| Completion rate | N/A |
+| Provider success rate | N/A |
+| Provider latency (mean / P50 / P95) | N/A |
+| Token usage (runs with provider usage) | 0 |
+| Input / output / total tokens | 0 / 0 / 0 |
+| Tool calls (success rate) | 0 (N/A) |
+| Tool errors / blocked / invalid | 0 / 0 / 0 |
+| Security blocks / safety violations | 0 / 0 |
+| Terminations | N/A |
+| Last updated | N/A |
+
+_No telemetry runs recorded. Run the dashboard command to populate this section._
+<!-- telemetry-dashboard:end -->

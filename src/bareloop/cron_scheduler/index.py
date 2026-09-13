@@ -13,20 +13,19 @@ class CronJob:
     id: str
     cron: str
     prompt: str
-    recurring: bool
-    pending_delivery: bool = False
+    is_repeat: bool
+    pending_delivery: bool = False # 还未入队
     last_fired: str | None = None
 
-
+DURABLE_CRON_PATH = WORKDIR / ".bareloop" / ".cron_jobs.json"
 cron_start_flag = False
 STOP_CRON = threading.Event()
 cron_runtime_list: list[threading.Thread] = []
 runtime_lock = threading.RLock()
-DURABLE_CRON_PATH = WORKDIR / ".bareloop" / ".schedule_task.json"
 cron_lock = threading.RLock()
 agent_lock = threading.Lock()
-scheduled_jobs: dict[str, CronJob] = {}
-cron_queue: list[CronJob] = []
+scheduled_jobs: dict[str, CronJob] = {} # 有效的 CronJob
+cron_queue: list[CronJob] = [] # 已经到期、等待进入 Agent Loop 投递的任务
 
 
 def _validate_cron_field(field: str, minimum: int, maximum: int) -> str | None:
@@ -165,6 +164,11 @@ def _enqueue_due_job(job, time_maker):
 
 
 def poll_due_jobs(moment: datetime):
+    """
+    检查当前是否存在到时且未完成的任务
+    :param moment:
+    :return:
+    """
     time_maker = moment.strftime("%Y-%m-%d %H:%M")
     with cron_lock:
         for cron in list(scheduled_jobs.values()):
@@ -178,6 +182,11 @@ def poll_due_jobs(moment: datetime):
 
 
 def cron_scheduler_loop(stop_cron: threading.Event = STOP_CRON):
+    """
+    启动一个每隔1秒检查corn文件的loop
+    :param stop_cron:
+    :return:
+    """
     while not stop_cron.wait(1.0):
         poll_due_jobs(datetime.now())
 
@@ -192,6 +201,13 @@ def queue_processor_loop(
     trace_writer,
     stop_event: threading.Event = STOP_CRON,
 ):
+    """
+    启动一个间隔0.2s的loop检查落盘的cron 如果到时间并且agentlock空闲时主动发起一轮对话
+    :param messages:
+    :param trace_writer:
+    :param stop_event:
+    :return:
+    """
     while not stop_event.wait(0.2):
         if not has_cron_queue() or not agent_lock.acquire(blocking=False):
             continue
@@ -205,6 +221,10 @@ def queue_processor_loop(
 
 
 def save_cron_durable():
+    """
+    本地落盘cron
+    :return:
+    """
     with cron_lock:
         payload = [asdict(job) for job in scheduled_jobs.values()]
         DURABLE_CRON_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -219,6 +239,14 @@ def save_cron_durable():
 
 
 def start_cron_scheduler(messages: list, trace_writer):
+    """
+    启动两个线程
+    1. 用于检查本地cron状态, 持续加入到处理cron队列中
+    2. 用于检查cron队列是否有任务, 当主loop空闲时主动发起对话执行cron
+    :param messages:
+    :param trace_writer:
+    :return:
+    """
     global cron_start_flag
     with runtime_lock:
         if cron_start_flag:
@@ -244,6 +272,11 @@ def start_cron_scheduler(messages: list, trace_writer):
 
 
 def acknowledge_cron_jobs(jobs: list[CronJob]):
+    """
+
+    :param jobs:
+    :return:
+    """
     changed: list[tuple[CronJob, bool]] = []
     removed: list[CronJob] = []
     with cron_lock:
@@ -252,7 +285,7 @@ def acknowledge_cron_jobs(jobs: list[CronJob]):
             if current is None:
                 continue
             changed.append((current, current.pending_delivery))
-            if current.recurring:
+            if current.is_repeat:
                 current.pending_delivery = False
             else:
                 removed.append(current)
@@ -300,14 +333,14 @@ def new_cron_id() -> str:
     raise RuntimeError("Could not allocate a cron job ID")
 
 
-def schedule_cron(cron: str, prompt: str, recurring: bool):
+def schedule_cron(cron: str, prompt: str, is_repeat: bool):
     error = validate_cron(cron)
     if error:
         return error
     if not prompt.strip():
         return "Prompt cannot be empty"
     with cron_lock:
-        job = CronJob(id=new_cron_id(), cron=cron, prompt=prompt, recurring=recurring)
+        job = CronJob(id=new_cron_id(), cron=cron, prompt=prompt, is_repeat=is_repeat)
         scheduled_jobs[job.id] = job
         try:
             save_cron_durable()

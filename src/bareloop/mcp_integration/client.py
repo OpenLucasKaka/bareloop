@@ -330,7 +330,7 @@ async def mcp_init() -> list[ToolDefinition]:
         )
 
     config = MCPConfig(
-        name="demo",
+        name="mcp_tool",
         endpoints=tuple(endpoints),
     )
 

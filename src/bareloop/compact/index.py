@@ -13,6 +13,12 @@ TOOL_RESULTS_DIR = WORKDIR / ".bareloop" / ".task_outputs" / "tool-results"
 
 
 def persist_large_output(content, id):
+    """
+    大文件落盘
+    :param content:
+    :param id:
+    :return:
+    """
     if len(str(content)) < PERSIST_THRESHOLD:
         return content
     content = str(content)
@@ -33,6 +39,12 @@ def persist_large_output(content, id):
 
 
 def tool_budget_result(messages, max_bytes=20000):
+    """
+    当工具调用输出结果过大落盘本地
+    :param messages:
+    :param max_bytes:
+    :return:
+    """
     recent_tool_indexes = []
     for index in range(len(messages) - 1, -1, -1):
         m = messages[index]
@@ -60,6 +72,11 @@ def tool_budget_result(messages, max_bytes=20000):
 
 
 def micro_compact(messages):
+    """
+    上下文过长, 将删除最早的工具调用结果, 如需要重新调用即可
+    :param messages:
+    :return:
+    """
     tool_messages = []
     for m in messages:
         if m["role"] == "tool":

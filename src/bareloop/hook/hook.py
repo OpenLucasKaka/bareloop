@@ -1,18 +1,20 @@
 from pathlib import Path
 
-from bareloop.goal import stop_goal_gate
 from bareloop.settings import DENY_LIST, DESTRUCTIVE, WORKDIR
 
 HOOKS = {
     "PreUserPromptInput": [],
     "PreToolUse": [],
     "PostToolUse": [],
-    "StopGoalGate": [],
     "Stop": [],
 }
 
-# 无状态、单次调用级 HITL
 def permission_hook(block):
+    """
+    无状态、单次调用级 HITL 还需改造
+    :param block:
+    :return:
+    """
     arguments = block["arguments"]
     if block["name"] == "bash":
         command = str(arguments.get("command", ""))
@@ -22,7 +24,7 @@ def permission_hook(block):
         for destructive in DESTRUCTIVE:
             if destructive in command:
                 print("DESTRUCTIVE:", destructive)
-        print(f"Tool: bash需要执行{arguments['command']}")
+        print(f"Tool: Bash needs to be execute {arguments['command']}")
         choice = input("allow? y/n?: ")
         if choice.lower().strip() == "y":
             return None
@@ -35,7 +37,7 @@ def permission_hook(block):
         if block["name"] != "glob":
             outside_workspace = outside_workspace or not file_path.is_relative_to(WORKDIR.resolve())
         if outside_workspace:
-            print("超出工作区域!")
+            print("Outside the working area!")
             print(f"Tool: {block['name']}({arguments})")
             choice = input("allow? y/n")
             if choice.lower().strip() == "y":
@@ -60,9 +62,8 @@ def trigger_hook(event: str, *args):
             if result is not None:
                 return result
     except Exception as e:
-        # print(f'触发hook异常: {e}')
         print(f"HOOK ERROR: {type(e).__name__}: {e!r}")
-        return f"触发hook异常: {e}"
+        return f"Hook exception triggered: {e}"
 
 
 def registry_hook(event: str, callback):
@@ -72,5 +73,4 @@ def registry_hook(event: str, callback):
 def hook():
     registry_hook("PreToolUse", permission_hook)
     # registry_hook('PostToolUse', permission_hook)
-    registry_hook("StopGoalGate", stop_goal_gate)
     registry_hook("Stop", summary_hook)

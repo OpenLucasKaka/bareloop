@@ -35,6 +35,253 @@ def test_filesystem_uses_cwd_as_security_root(tmp_path: Path) -> None:
     )
 
 
+def test_dispatch_write_forces_workspace_over_model_cwd(tmp_path: Path) -> None:
+    from bareloop.tools.dispatcher import dispatch_tool
+
+    model_cwd = tmp_path / "model-cwd"
+    model_cwd.mkdir()
+
+    result = dispatch_tool(
+        "write",
+        {"path": "answer.txt", "content": "42", "cwd": model_cwd},
+        workspace=tmp_path,
+    )
+
+    assert result == "Wrote answer.txt"
+    assert (tmp_path / "answer.txt").read_text(encoding="utf-8") == "42"
+    assert not (model_cwd / "answer.txt").exists()
+
+
+def test_dispatch_result_classifies_success_and_unknown_tool(tmp_path: Path) -> None:
+    from bareloop.tools.dispatcher import dispatch_tool_result
+
+    success = dispatch_tool_result(
+        "write",
+        {"path": "answer.txt", "content": "42"},
+        workspace=tmp_path,
+    )
+    missing = dispatch_tool_result("missing_tool", {}, workspace=tmp_path)
+
+    assert success.output == "Wrote answer.txt"
+    assert success.outcome == "success"
+    assert success.error_kind is None
+    assert success.safety_violation is False
+    assert missing.outcome == "error"
+    assert missing.error_kind == "unknown_tool"
+
+
+def test_dispatch_result_classifies_workspace_escape(tmp_path: Path) -> None:
+    from bareloop.tools.dispatcher import dispatch_tool_result
+
+    result = dispatch_tool_result(
+        "write",
+        {"path": "../escaped.txt", "content": "forbidden"},
+        workspace=tmp_path,
+    )
+
+    assert result.outcome == "blocked"
+    assert result.error_kind == "workspace_escape"
+    assert result.security_block is True
+    assert result.safety_violation is False
+    assert not (tmp_path.parent / "escaped.txt").exists()
+
+
+def test_dispatch_does_not_inject_cwd_into_dynamic_tool(tmp_path: Path) -> None:
+    from bareloop.tools.dispatcher import dispatch_tool
+    from bareloop.tools.models import ToolDefinition
+    from bareloop.tools.registry import clear_dynamic_tools, register_dynamic_tools
+
+    received = []
+
+    def handler(**arguments):
+        received.append(arguments)
+        return "ok"
+
+    clear_dynamic_tools()
+    try:
+        register_dynamic_tools(
+            [
+                ToolDefinition(
+                    name="test_dynamic_tool",
+                    description="test",
+                    parameters={"type": "object", "properties": {}},
+                    handler=handler,
+                )
+            ]
+        )
+
+        assert dispatch_tool("test_dynamic_tool", {}, workspace=tmp_path) == "ok"
+        assert received == [{}]
+    finally:
+        clear_dynamic_tools()
+
+
+def test_dispatch_background_bash_forces_workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bareloop.tools import dispatcher
+
+    received = []
+    monkeypatch.setattr(
+        dispatcher,
+        "start_background_task",
+        lambda arguments: received.append(arguments) or "task_test",
+    )
+
+    result = dispatcher.dispatch_tool(
+        "bash",
+        {"command": "pwd", "cwd": tmp_path / "model-cwd", "shouldBack": True},
+        call_id="call_test",
+        workspace=tmp_path,
+    )
+
+    assert result == "[Background task task_test started] The result will be collected later."
+    assert received == [
+        {
+            "command": "pwd",
+            "cwd": tmp_path.resolve(),
+            "shouldBack": True,
+            "id": "call_test",
+        }
+    ]
+
+
+def test_agent_session_tool_call_writes_inside_session_workdir(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from bareloop.session import AgentSession
+
+    workspace = tmp_path / "workspace"
+    model_cwd = tmp_path / "model-cwd"
+    workspace.mkdir()
+    model_cwd.mkdir()
+    tool_call = SimpleNamespace(
+        id="call_write",
+        function=SimpleNamespace(
+            name="write",
+            arguments=json.dumps({"path": "answer.txt", "content": "42", "cwd": str(model_cwd)}),
+        ),
+    )
+    responses = iter(
+        [
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(message=SimpleNamespace(content="", tool_calls=[tool_call]))
+                ]
+            ),
+            SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="done", tool_calls=None))]
+            ),
+        ]
+    )
+    client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: next(responses)))
+    )
+    tokenizer = SimpleNamespace(apply_chat_template=lambda *_args, **_kwargs: [])
+    session = AgentSession(
+        workdir=workspace,
+        system_prompt="system",
+        client_instance=client,
+        model="test-model",
+        tokenizer_instance=tokenizer,
+        max_rounds=2,
+        trace=None,
+    )
+
+    result = session.run("write the answer")
+
+    assert result.completed is True
+    assert result.final_output == "done"
+    assert (workspace / "answer.txt").read_text(encoding="utf-8") == "42"
+    assert not (model_cwd / "answer.txt").exists()
+
+
+def test_execute_agent_loop_without_allowlist_exposes_all_tools() -> None:
+    from types import SimpleNamespace
+
+    from bareloop.loop import execute_agent_loop
+    from bareloop.tools.registry import get_tool_schemas
+
+    requests = []
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="done", tool_calls=None))]
+    )
+    client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=lambda **kwargs: requests.append(kwargs) or response)
+        )
+    )
+    tokenizer = SimpleNamespace(apply_chat_template=lambda *_args, **_kwargs: [])
+
+    result = execute_agent_loop(
+        [{"role": "system", "content": "system"}],
+        client=client,
+        model="test-model",
+        tokenizer=tokenizer,
+        workdir=None,
+        max_rounds=1,
+        allowed_tool_names=None,
+    )
+
+    exposed_names = {tool["function"]["name"] for tool in requests[0]["tools"]}
+    registered_names = {tool["function"]["name"] for tool in get_tool_schemas()}
+    assert result.completed is True
+    assert "bash" in exposed_names
+    assert exposed_names == registered_names
+
+
+def test_execute_agent_loop_uses_provider_compatible_todo_reminder(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from bareloop.loop import execute_agent_loop
+
+    requests = []
+
+    def create(**kwargs):
+        requests.append(kwargs)
+        if any(message["role"] == "developer" for message in kwargs["messages"][1:]):
+            raise RuntimeError("System message must be at the beginning")
+        call_number = len(requests)
+        if call_number <= 3:
+            tool_call = SimpleNamespace(
+                id=f"call_{call_number}",
+                function=SimpleNamespace(
+                    name="read",
+                    arguments=json.dumps({"path": f"missing-{call_number}.txt"}),
+                ),
+            )
+            message = SimpleNamespace(content="", tool_calls=[tool_call])
+        else:
+            message = SimpleNamespace(content="done", tool_calls=None)
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    tokenizer = SimpleNamespace(apply_chat_template=lambda *_args, **_kwargs: [])
+    messages = [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "inspect three files"},
+    ]
+
+    result = execute_agent_loop(
+        messages,
+        client=client,
+        model="strict-template-model",
+        tokenizer=tokenizer,
+        workdir=tmp_path,
+        max_rounds=4,
+        allowed_tool_names={"read"},
+    )
+
+    assert result.completed is True
+    assert result.final_output == "done"
+    reminder = next(
+        message
+        for message in requests[3]["messages"]
+        if message["content"] == "<reminder>Update your todos.</reminder>"
+    )
+    assert reminder["role"] == "user"
+
+
 def test_permission_hook_prompts_for_external_cwd(monkeypatch: pytest.MonkeyPatch) -> None:
     from bareloop.hook.hook import permission_hook
 
@@ -108,6 +355,7 @@ def test_cli_mode_prompts_keep_input_label_fixed(monkeypatch: pytest.MonkeyPatch
         (
             "› ",
             [
+                ("", "\n\n\n\n"),
                 ("class:hint", "  /mode 切换"),
                 ("class:hint", f" · {mian.WORKDIR}"),
             ],
@@ -115,6 +363,7 @@ def test_cli_mode_prompts_keep_input_label_fixed(monkeypatch: pytest.MonkeyPatch
         (
             "› ",
             [
+                ("", "\n\n\n\n"),
                 ("class:mode.goal", "  Goal mode · /mode 切换"),
                 ("class:hint", f" · {mian.WORKDIR}"),
             ],
@@ -333,7 +582,7 @@ def test_schedule_cron_creates_storage_parent(
     monkeypatch.setattr(cron, "DURABLE_CRON_PATH", tmp_path / "nested" / "cron.json")
     monkeypatch.setattr(cron, "scheduled_jobs", {})
 
-    job = cron.schedule_cron("0 12 * * *", "run checks", recurring=True)
+    job = cron.schedule_cron("0 12 * * *", "run checks", is_repeat=True)
 
     assert isinstance(job, cron.CronJob)
     assert cron.DURABLE_CRON_PATH.is_file()
@@ -343,7 +592,7 @@ def test_cancel_cron_persists_removal(tmp_path: Path, monkeypatch: pytest.Monkey
     from bareloop.cron_scheduler import index as cron
 
     path = tmp_path / "cron.json"
-    job = cron.CronJob("cron_deadbeef", "0 12 * * *", "run checks", recurring=True)
+    job = cron.CronJob("cron_deadbeef", "0 12 * * *", "run checks", is_repeat=True)
     monkeypatch.setattr(cron, "DURABLE_CRON_PATH", path)
     monkeypatch.setattr(cron, "scheduled_jobs", {job.id: job})
     monkeypatch.setattr(cron, "cron_queue", [job])
@@ -393,6 +642,69 @@ def test_agent_loop_acknowledges_delivered_cron(
 
     assert acknowledged == [job]
     assert restored == []
+
+
+def test_background_results_are_collected_before_loading_starts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from bareloop import loop
+
+    events = []
+    memory_inputs = []
+
+    class RecordingLoading:
+        def __enter__(self):
+            events.append("loading-enter")
+            return self
+
+        def __exit__(self, *_args):
+            events.append("loading-exit")
+
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="done", tool_calls=None))]
+    )
+
+    def collect(messages):
+        events.append("collect")
+        messages.append({"role": "user", "content": "background notification"})
+
+    def load_memories(messages):
+        memory_inputs.append([dict(message) for message in messages])
+        return ""
+
+    monkeypatch.setattr(loop, "ModelLoading", RecordingLoading)
+    monkeypatch.setattr(loop, "load_memories", load_memories)
+    monkeypatch.setattr(loop, "inject_background_results", collect)
+    monkeypatch.setattr(loop, "tool_budget_result", lambda messages: messages)
+    monkeypatch.setattr(loop, "micro_compact", lambda messages: messages)
+    monkeypatch.setattr(loop, "get_tool_schemas", lambda: [])
+    monkeypatch.setattr(loop, "trigger_hook", lambda *_args: None)
+    monkeypatch.setattr(loop, "schedule_memory_maintenance", lambda _messages: None)
+    monkeypatch.setattr(
+        loop,
+        "tokenizer",
+        SimpleNamespace(apply_chat_template=lambda *_args, **_kwargs: []),
+    )
+    monkeypatch.setattr(
+        loop.client,
+        "chat",
+        SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: response)),
+    )
+
+    loop._run_agent_loop(
+        [{"role": "system", "content": "system"}],
+        SimpleNamespace(write=lambda **_: None),
+        [],
+        [],
+        [],
+        {"accepted": False},
+        loop.AgentMode.NORMAL,
+    )
+
+    assert events == ["collect", "loading-enter", "loading-exit"]
+    assert memory_inputs == [[{"role": "system", "content": "system"}]]
 
 
 def test_cron_only_turn_does_not_extract_previous_assistant_as_evidence(
@@ -493,6 +805,7 @@ def test_agent_loop_does_not_replay_cron_after_tool_execution(
     from types import SimpleNamespace
 
     from bareloop import loop
+    from bareloop.tools.dispatcher import DispatchResult
 
     job = SimpleNamespace(id="cron_deadbeef", prompt="run checks")
     tool_call = SimpleNamespace(
@@ -527,7 +840,11 @@ def test_agent_loop_does_not_replay_cron_after_tool_execution(
         "normalize_tool_call",
         lambda _tool: {"id": "call_one", "name": "bash", "arguments": {"command": "true"}},
     )
-    monkeypatch.setattr(loop, "dispatch_tool", lambda *_args, **_kwargs: "ok")
+    monkeypatch.setattr(
+        loop,
+        "dispatch_tool_result",
+        lambda *_args, **_kwargs: DispatchResult("ok", "success"),
+    )
     monkeypatch.setattr(
         loop,
         "tokenizer",
@@ -553,6 +870,7 @@ def test_agent_loop_extracts_memories_from_turn_buffer_after_compaction(
     from types import SimpleNamespace
 
     from bareloop import loop
+    from bareloop.tools.dispatcher import DispatchResult
 
     tool_call = SimpleNamespace(
         id="call_one",
@@ -581,7 +899,11 @@ def test_agent_loop_extracts_memories_from_turn_buffer_after_compaction(
     monkeypatch.setattr(loop, "micro_compact", lambda messages: messages)
     monkeypatch.setattr(loop, "get_tool_schemas", lambda: [])
     monkeypatch.setattr(loop, "trigger_hook", lambda *_args: None)
-    monkeypatch.setattr(loop, "dispatch_tool", lambda *_args, **_kwargs: "tool output")
+    monkeypatch.setattr(
+        loop,
+        "dispatch_tool_result",
+        lambda *_args, **_kwargs: DispatchResult("tool output", "success"),
+    )
     monkeypatch.setattr(loop, "consolidate_memories", lambda: None)
     monkeypatch.setattr(
         loop,
@@ -1091,10 +1413,7 @@ def test_memory_extraction_forces_tool_and_supplies_complete_context(
 
     request = calls[0]
     assert request["tools"] == [MEMORY_DECISION_TOOL]
-    assert request["tool_choice"] == {
-        "type": "function",
-        "function": {"name": "decide_memories"},
-    }
+    assert request["tool_choice"] == "required"
     assert request["parallel_tool_calls"] is False
     assert request["max_completion_tokens"] == 2000
     assert "max_tokens" not in request

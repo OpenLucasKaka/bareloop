@@ -1,0 +1,9 @@
+id: recover-tool-error
+prompt: >-
+  First call read for missing.txt and observe the Tool error. Then recover by creating recovery.txt.
+  The entire file content must be the single literal word "recovered" with no trailing newline.
+max_rounds: 8
+graders:
+  - type: file_equals
+    path: recovery.txt
+    expected: "recovered"

@@ -17,9 +17,9 @@ ToolScope = Literal["main", "subagent"]
 
 
 def _parameters(
-    properties: dict[str, Any],
-    required: tuple[str, ...] = (),
-    **constraints: Any,
+        properties: dict[str, Any],
+        required: tuple[str, ...] = (),
+        **constraints: Any,
 ) -> dict[str, Any]:
     return {
         "type": "object",
@@ -253,6 +253,39 @@ _TOOL_DEFINITIONS = (
         ),
         handler=_teammate_handler("run_create_worktree"),
     ),
+    ToolDefinition(
+        name="create_cron",
+        description="Create a cron task",
+        parameters=_parameters(
+            {
+                "cron": _string(
+                    # pattern="^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+                    maxLength=64,
+                ),
+                "prompt": _string(),
+                "is_repeat": {"type": "boolean"}
+            },
+            ("cron", "prompt", "is_repeat"),
+        ),
+        handler=_teammate_handler("run_cron_scheduler"),
+    ),
+    ToolDefinition(
+        name="cancel_cron",
+        description="cancel a cron task",
+        parameters=_parameters(
+            {
+                "job_id": _string(),
+            },
+            "job_id",
+        ),
+        handler=_teammate_handler("run_cancel_cron"),
+    ),
+    ToolDefinition(
+        name="list_cron",
+        description="list all cron tasks",
+        parameters=_parameters({}),
+        handler=_teammate_handler("run_cron_list"),
+    ),
 )
 
 _TOOLS_BY_NAME = {definition.name: definition for definition in _TOOL_DEFINITIONS}
@@ -276,8 +309,12 @@ def get_tool_schemas(scope: ToolScope = "main") -> list[dict[str, Any]]:
 def get_tool(name: str) -> ToolDefinition | None:
     return _DYNAMIC_TOOLS_BY_NAME.get(name) or _TOOLS_BY_NAME.get(name)
 
-
 def register_dynamic_tools(definitions: list[ToolDefinition]) -> None:
+    """
+    用于mcp动态注册的工具参数校验 方式调用过程中报错
+    :param definitions:
+    :return:
+    """
     pending: dict[str, ToolDefinition] = {}
     for definition in definitions:
         if definition.name in _TOOLS_BY_NAME:
