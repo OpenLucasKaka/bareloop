@@ -55,6 +55,11 @@ def dispatch_tool_result(
                 "success",
             )
 
+        if definition.supports_background:
+            # ``shouldBack`` controls dispatching and is not part of the
+            # foreground handler signature.
+            tool_arguments.pop("shouldBack", None)
+
         result = definition.handler(**tool_arguments)
         output = "(no output)" if result is None else str(result)
         if output.startswith("Error: path escapes working directory:"):

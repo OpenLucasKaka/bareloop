@@ -146,6 +146,19 @@ def test_dispatch_background_bash_forces_workspace(
     ]
 
 
+def test_dispatch_foreground_bash_ignores_background_flag(tmp_path: Path) -> None:
+    from bareloop.tools.dispatcher import dispatch_tool_result
+
+    result = dispatch_tool_result(
+        "bash",
+        {"command": "printf foreground", "shouldBack": False},
+        workspace=tmp_path,
+    )
+
+    assert result.output == "foreground"
+    assert result.outcome == "success"
+
+
 def test_agent_session_tool_call_writes_inside_session_workdir(tmp_path: Path) -> None:
     from types import SimpleNamespace
 
