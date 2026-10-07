@@ -17,6 +17,7 @@ from bareloop.task_system import (
 )
 from bareloop.task_system import model as task_model
 
+
 # 区分全局状态和项目状态, 将worktree移到全局 也可避免误测和误扫
 def _default_worktree_dir(workdir: Path) -> Path:
     configured_home = os.getenv("BARELOOP_HOME")
@@ -243,3 +244,46 @@ def get_agent_cwd() -> tuple[Path | None, str | None]:
         return assignment_cwd("agent"), None
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
         return None, f"Error: Invalid task assignment: {exc}"
+
+
+def remove_worktree(name: str, force: bool = False, delete_branch: bool = True) -> str:
+    error = validate_worktree_name(name)
+    if error:
+        return f"Error: {error}"
+    try:
+        path = _resolve_worktree_path(name)
+    except (TypeError, ValueError) as exc:
+        return f"Error: {exc}"
+
+    branch = _create_worktree_branch(name)
+
+    with task_lock():
+        entries, registry_error = _read_registered_worktrees()
+        if registry_error:
+            return f"Error: {registry_error}"
+        if path not in entries and not path.exists():
+            return f"Error: Worktree '{name}' does not exist"
+
+        cmd = ["worktree", "remove"]
+        if force:
+            cmd.append("--force")
+        cmd.append(str(path))
+        ok, output = _run_git(cmd)
+        if not ok:
+            return f"Error: Could not remove worktree: {output}"
+
+        if delete_branch:
+            branch_exists, _ = _run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"])
+            if branch_exists:
+                branch_flag = "-D" if force else "-d"
+                ok_branch, branch_output = _run_git(["branch", branch_flag, branch])
+                if not ok_branch:
+                    return f"Worktree '{name}' removed, but branch deletion failed: {branch_output}"
+
+        for task in list_tasks():
+            if task.worktree == name:
+                task.worktree = None
+                save_task(task)
+
+    return f"Worktree '{name}' removed successfully"
+

@@ -9,7 +9,13 @@ from typing import Any
 
 from bareloop.background_system import inject_background_results
 from bareloop.cli_loading import ModelLoading
-from bareloop.compact import CONTEXT_LIMIT, compact_history, micro_compact, tool_budget_result
+from bareloop.compact import (
+    CONTEXT_LIMIT,
+    compact_history,
+    micro_compact,
+    reactive_compact,
+    tool_budget_result,
+)
 from bareloop.cron_scheduler import acknowledge_cron_jobs, consume_cron_queue, restore_cron_jobs
 from bareloop.goal import GoalController, stop_goal_gate
 from bareloop.hook import trigger_hook
@@ -191,8 +197,12 @@ def execute_agent_loop(
     # 收集到的cron jobs
     collect_cron_jobs = collect_cron_jobs if collect_cron_jobs is not None else []
     scheduled_messages = scheduled_messages if scheduled_messages is not None else []
-    memory_evidence_messages = memory_evidence_messages if memory_evidence_messages is not None else []
-    cron_delivery_state = cron_delivery_state if cron_delivery_state is not None else {"accepted": False}
+    memory_evidence_messages = (
+        memory_evidence_messages if memory_evidence_messages is not None else []
+    )
+    cron_delivery_state = (
+        cron_delivery_state if cron_delivery_state is not None else {"accepted": False}
+    )
     first_round = True
     rounds = 0
     tool_calls = 0
@@ -290,16 +300,47 @@ def execute_agent_loop(
                         model=model, messages=request_messages, tools=tool_schemas
                     )
                 except Exception as error:
-                    #压缩策略L3: 还需处理因context超出limit错误 被动压缩
-                    # messages[:] = reactive_compact(messages)
-                    provider_failed = True
-                    telemetry.provider_calls.append(
-                        ProviderCallMetric.failed_call(
-                            (perf_counter() - provider_started_at) * 1000,
-                            error,
+                    error_str = str(error).lower()
+                    is_overflow = any(
+                        kw in error_str
+                        for kw in (
+                            "context length",
+                            "maximum context",
+                            "context_length_exceeded",
+                            "tokens exceeded",
+                            "too many tokens",
+                            "token limit",
+                            "string too long",
                         )
                     )
-                    raise
+                    if is_overflow and not provider_failed:
+                        provider_failed = True
+                        if print_output:
+                            print("[reactive compact on context overflow]")
+                        messages[:] = reactive_compact(messages)
+                        request_messages = messages
+                        try:
+                            response = client.chat.completions.create(
+                                model=model, messages=request_messages, tools=tool_schemas
+                            )
+                            provider_failed = False
+                        except Exception as retry_err:
+                            telemetry.provider_calls.append(
+                                ProviderCallMetric.failed_call(
+                                    (perf_counter() - provider_started_at) * 1000,
+                                    retry_err,
+                                )
+                            )
+                            raise
+                    else:
+                        provider_failed = True
+                        telemetry.provider_calls.append(
+                            ProviderCallMetric.failed_call(
+                                (perf_counter() - provider_started_at) * 1000,
+                                error,
+                            )
+                        )
+                        raise
                 telemetry.provider_calls.append(
                     ProviderCallMetric.succeeded_call(
                         (perf_counter() - provider_started_at) * 1000,

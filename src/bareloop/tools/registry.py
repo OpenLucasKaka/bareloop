@@ -128,6 +128,12 @@ _TOOL_DEFINITIONS = (
         handler=load_skill,
     ),
     ToolDefinition(
+        name="spawn_subagent",
+        description="委派子 Agent 完成部分任务",
+        parameters=_parameters({"query": _string("子 Agent 需要完成的任务")}, ("query",)),
+        handler=spaw_subagent,
+    ),
+    ToolDefinition(
         name="spaw_subagent",
         description="委派子 Agent 完成部分任务",
         parameters=_parameters({"query": _string("子 Agent 需要完成的任务")}, ("query",)),
@@ -276,7 +282,7 @@ _TOOL_DEFINITIONS = (
             {
                 "job_id": _string(),
             },
-            "job_id",
+            ("job_id",),
         ),
         handler=_teammate_handler("run_cancel_cron"),
     ),

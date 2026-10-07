@@ -76,5 +76,10 @@ coverage/
 .lerna.json
 lerna-debug.log*
 
-# Local scratch files
+# Local scratch files & candidate notes
 /t.py
+*DOSSIER*.md
+*.local
+*.local.*
+.eval_cache/
+

@@ -155,7 +155,9 @@ TOKENIZER_MODEL=your-transformers-tokenizer
 ### 运行 Agent
 
 ```bash
-uv run python -m bareloop.mian
+uv run bareloop
+# 或作为模块运行：
+# uv run python -m bareloop.main
 ```
 
 按 `Enter` 发送，按 `Esc` + `Enter` 或 `Ctrl` + `J` 插入换行；输入 `q`、`quit` 或
@@ -166,7 +168,7 @@ uv run python -m bareloop.mian
 BareLoop 使用 `prompt_toolkit`，因此 Run Console 需要模拟终端，交互输入和多行快捷键才能
 正常工作。打开 **Run → Edit Configurations**，新增或编辑一个 **Python** 配置，并设置：
 
-- **Module name：** `bareloop.mian`
+- **Module name：** `bareloop.main`
 - **Working directory：** 项目根目录
 - **Python interpreter：** 项目中的 `.venv/bin/python`
 - **Environment files：** `.env`
@@ -207,7 +209,7 @@ BareLoop 先尝试本地地址，再尝试配置的 `MCP_REMOTE_URL`；发现的
 
 ```text
 src/bareloop/
-├── mian.py              # CLI 启动与共享 Runtime Session
+├── main.py              # CLI 启动与共享 Runtime Session (保留 mian.py 作为兼容别名)
 ├── loop.py              # 核心 Model/Tool/Result 循环
 ├── tools/               # Tool Schema、注册表、调度器和内置工具
 ├── hook/                # 权限与生命周期 Hooks

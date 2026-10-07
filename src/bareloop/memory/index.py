@@ -378,7 +378,8 @@ def extract_memories(messages, count):
             messages=build_memory_decision_messages(existing_text, numbered_transcript),
             max_completion_tokens=2000,
             tools=[MEMORY_DECISION_TOOL],
-            tool_choice="required", # 因tool_choice如果为object 非openai官方模型可能无法兼容 所以使用string格式
+            # 因tool_choice如果为object 非openai官方模型可能无法兼容 所以使用string格式
+            tool_choice="required",
             parallel_tool_calls=False,
         )
         tool_calls = response.choices[0].message.tool_calls

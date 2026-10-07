@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+import jsonschema
+
 from bareloop.background_system import start_background_task
 from bareloop.tools.registry import ToolScope, get_tool
 
@@ -16,6 +18,26 @@ class DispatchResult:
     error_kind: str | None = None
     security_block: bool = False
     safety_violation: bool = False
+
+
+def _validate_tool_arguments(schema: dict[str, Any], arguments: Mapping[str, Any]) -> str | None:
+    try:
+        validator = jsonschema.Draft202012Validator(schema)
+        # Convert any Path objects to str for JSON schema validation compatibility
+        serializable_args = {
+            k: str(v) if isinstance(v, Path) else v
+            for k, v in arguments.items()
+        }
+        errors = list(validator.iter_errors(serializable_args))
+        if errors:
+            first_error = errors[0]
+            msg = first_error.message
+            if first_error.path:
+                msg = f"'{'.'.join(str(p) for p in first_error.path)}': {msg}"
+            return msg
+        return None
+    except Exception as exc:
+        return f"schema validation error: {exc}"
 
 
 def dispatch_tool_result(
@@ -37,6 +59,15 @@ def dispatch_tool_result(
         )
     if scope not in ("main", "subagent"):
         return DispatchResult(f"Error: unknown tool scope '{scope}'", "error", "invalid_scope")
+
+    if definition.parameters:
+        val_error = _validate_tool_arguments(definition.parameters, arguments)
+        if val_error:
+            return DispatchResult(
+                f"Error: Invalid arguments for tool '{name}': {val_error}",
+                "error",
+                "invalid_arguments",
+            )
 
     tool_arguments = dict(arguments)
     if workspace is not None and name in _WORKSPACE_AWARE_TOOLS:

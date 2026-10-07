@@ -1,12 +1,10 @@
 """Tests for CLI memory system functionality."""
 
-import pytest
-from pathlib import Path
 
 
 def test_memory_system_initialization():
     """Test that the memory system initializes correctly."""
-    from bareloop.memory import load_memories, extract_memories, consolidate_memories
+    from bareloop.memory import consolidate_memories, extract_memories, load_memories
     
     # Test that functions are callable
     assert callable(load_memories)
@@ -19,8 +17,6 @@ def test_memory_schema_definitions():
     from bareloop.memory.schema import (
         MEMORY_TYPES,
         PERSISTENT_MEMORY_BASES,
-        MEMORY_DECISION_TOOL,
-        MEMORY_CONSOLIDATION_RESPONSE_FORMAT
     )
     
     # Test memory types
@@ -40,7 +36,7 @@ def test_memory_prompts():
     from bareloop.memory.prompt_version import (
         CONSOLIDATION_PROMPT_V1,
         CONSOLIDATION_PROMPT_V2,
-        MEMORY_DECISION_PROMPT_V1
+        MEMORY_DECISION_PROMPT_V1,
     )
     
     # Test that prompts are non-empty strings
@@ -57,7 +53,6 @@ def test_memory_prompts():
 def test_memory_directory_structure():
     """Test that memory directory structure is properly initialized."""
     from bareloop.settings import WORKDIR
-    from pathlib import Path
     
     memory_dir = WORKDIR / ".bareloop" / ".memory"
     
@@ -69,11 +64,8 @@ def test_memory_directory_structure():
 def test_memory_index_functions():
     """Test memory index functions exist and have correct signatures."""
     import inspect
-    from bareloop.memory.index import (
-        load_memories,
-        extract_memories, 
-        consolidate_memories
-    )
+
+    from bareloop.memory.index import consolidate_memories, extract_memories, load_memories
     
     # Test function signatures
     load_sig = inspect.signature(load_memories)
@@ -84,7 +76,7 @@ def test_memory_index_functions():
     assert "count" in extract_sig.parameters
     
     consolidate_sig = inspect.signature(consolidate_memories)
-    # consolidate_memories should have no required parameters
+    assert len(consolidate_sig.parameters) == 0
 
 
 def test_memory_decision_tool_schema():

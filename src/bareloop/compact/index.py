@@ -119,3 +119,29 @@ def compact_history(messages):
         message for message in messages if message.get("role") in {"system", "developer"}
     ]
     return [*instructions, {"role": "user", "content": f"[Compacted]\n\n{summarize}"}]
+
+
+def reactive_compact(messages: list) -> list:
+    """
+    当 Provider 抛出上下文超限（Context Limit / Token Overflow）错误时的被动紧急压缩策略。
+    1. 强制将所有较长（>200字符）的 tool 结果进行落盘或截断；
+    2. 如果仍然过长，执行 compact_history 进行全量语义摘要。
+    """
+    compacted = []
+    for m in messages:
+        msg = dict(m)
+        if msg.get("role") == "tool":
+            content = str(msg.get("content", ""))
+            if len(content) > 200:
+                tool_id = msg.get("tool_call_id", "reactive")
+                msg["content"] = persist_large_output(content, tool_id)
+                if len(str(msg["content"])) > 300:
+                    msg["content"] = (
+                        "[Tool result truncated due to context limit overflow. Re-run if needed.]"
+                    )
+        compacted.append(msg)
+
+    if len(compacted) > 10:
+        return compact_history(compacted)
+    return compacted
+

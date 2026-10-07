@@ -1,9 +1,10 @@
 """Tests for CLI functionality."""
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from io import StringIO
 import sys
+from io import StringIO
+from unittest.mock import Mock
+
+import pytest
 
 
 def test_model_loading_initialization():
@@ -34,13 +35,14 @@ def test_model_loading_disabled_when_not_tty():
     mock_stream.isatty.return_value = False
     
     loader = ModelLoading(stream=mock_stream)
-    assert loader._enabled == False
+    assert not loader._enabled
 
 
 def test_model_loading_context_manager():
     """Test ModelLoading context manager behavior."""
-    from bareloop.cli_loading import ModelLoading
     from io import StringIO
+
+    from bareloop.cli_loading import ModelLoading
     
     output = StringIO()
     
@@ -56,9 +58,10 @@ def test_model_loading_context_manager():
 
 def test_model_loading_animation():
     """Test that ModelLoading produces animation frames."""
-    from bareloop.cli_loading import ModelLoading
-    from io import StringIO
     import time
+    from io import StringIO
+
+    from bareloop.cli_loading import ModelLoading
     
     output = StringIO()
     
@@ -77,14 +80,14 @@ def test_cli_loading_frames():
     
     loader = ModelLoading()
     expected_frames = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
-    assert loader.FRAMES == expected_frames
+    assert expected_frames == loader.FRAMES
 
 
 def test_import_cli_module():
     """Test that the CLI module can be imported successfully."""
     try:
         import bareloop.cli_loading
-        assert True
+        assert bareloop.cli_loading is not None
     except ImportError as e:
         pytest.fail(f"Failed to import cli_loading module: {e}")
 
@@ -93,8 +96,9 @@ def test_import_main_module():
     """Test that the main module can be imported successfully."""
     # This will test if all dependencies are properly set up
     try:
-        from bareloop import mian
-        assert True
+        from bareloop import main, mian
+        assert main is not None
+        assert mian is not None
     except ImportError as e:
         pytest.fail(f"Failed to import mian module: {e}")
 
@@ -102,7 +106,6 @@ def test_import_main_module():
 def test_wait_for_cli_event_structure():
     """Test the structure of wait_for_cli_event function."""
     from bareloop.mian import wait_for_cli_event
-    from bareloop.mode import AgentMode
     
     # Test that the function exists and is callable
     assert callable(wait_for_cli_event)

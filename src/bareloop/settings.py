@@ -19,7 +19,9 @@ PRIMARY_MODEL = os.getenv("PRIMARY_MODEL")
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL")
 MLX_MODEL = os.getenv("MLX_MODEL")
 TOKENIZER_MODEL = os.getenv("TOKENIZER_MODEL")
-DEFAUlT_MODEL = AgentMode.NORMAL
+DEFAULT_MODE = AgentMode.NORMAL
+DEFAULT_MODEL = DEFAULT_MODE  # Alias for backward compatibility
+DEFAUlT_MODEL = DEFAULT_MODE  # Typo alias for backward compatibility
 
 RED = "\033[31m"
 GREEN = "\033[32m"

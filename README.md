@@ -168,7 +168,9 @@ Keep `.env` local. It is ignored by Git; `.env.example` documents the supported 
 ### Run the agent
 
 ```bash
-uv run python -m bareloop.mian
+uv run bareloop
+# Or run as a module:
+# uv run python -m bareloop.main
 ```
 
 Press `Enter` to send, `Esc` + `Enter` or `Ctrl` + `J` to insert a newline, and enter `q`,
@@ -180,7 +182,7 @@ BareLoop uses `prompt_toolkit`, so its Run console needs terminal emulation for 
 multiline key bindings to work correctly. Open **Run → Edit Configurations**, add or edit a **Python**
 configuration, and use:
 
-- **Module name:** `bareloop.mian`
+- **Module name:** `bareloop.main`
 - **Working directory:** the repository root
 - **Python interpreter:** the project's `.venv/bin/python`
 - **Environment files:** `.env`
@@ -222,7 +224,7 @@ endpoint carrying `MCP_REMOTE_TOKEN` must use HTTPS; loopback HTTP remains avail
 
 ```text
 src/bareloop/
-├── mian.py              # CLI bootstrap and shared runtime session
+├── main.py              # CLI bootstrap and shared runtime session (mian.py kept as alias)
 ├── loop.py              # Core model/tool/result loop
 ├── tools/               # Tool schemas, registry, dispatcher, and built-ins
 ├── hook/                # Permission and lifecycle hooks
