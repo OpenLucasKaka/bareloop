@@ -24,10 +24,7 @@ def _validate_tool_arguments(schema: dict[str, Any], arguments: Mapping[str, Any
     try:
         validator = jsonschema.Draft202012Validator(schema)
         # Convert any Path objects to str for JSON schema validation compatibility
-        serializable_args = {
-            k: str(v) if isinstance(v, Path) else v
-            for k, v in arguments.items()
-        }
+        serializable_args = {k: str(v) if isinstance(v, Path) else v for k, v in arguments.items()}
         errors = list(validator.iter_errors(serializable_args))
         if errors:
             first_error = errors[0]

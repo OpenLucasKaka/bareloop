@@ -9,6 +9,7 @@ HOOKS = {
     "Stop": [],
 }
 
+
 def permission_hook(block):
     """
     无状态、单次调用级 HITL 还需改造

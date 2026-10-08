@@ -94,9 +94,7 @@ def agent_loop(
         [deepcopy(messages[-1])] if messages and messages[-1].get("role") == "user" else []
     )
     # 目前只处理模型调用可能失败的阶段
-    cron_delivery_state = {
-        "model_accepted": False
-    }
+    cron_delivery_state = {"model_accepted": False}
     try:
         result = _run_agent_loop(
             messages,
@@ -188,7 +186,7 @@ def execute_agent_loop(
     collect_cron_jobs: list[Any] | None = None,
     scheduled_messages: list[dict[str, str]] | None = None,
     memory_evidence_messages: list[dict[str, Any]] | None = None,
-    cron_delivery_state: dict[str, bool] | None = None, # cron任务的状态
+    cron_delivery_state: dict[str, bool] | None = None,  # cron任务的状态
     enable_background: bool = False,
     enable_memory: bool = False,
     enable_loading: bool = False,
@@ -281,7 +279,7 @@ def execute_agent_loop(
                     tokenize=True,
                     add_generation_prompt=True,
                 )
-                #压缩策略L2: 超过content限制主动压缩
+                # 压缩策略L2: 超过content限制主动压缩
                 if len(current_token) > CONTEXT_LIMIT:
                     if print_output:
                         logger.info("[auto compact]")
@@ -303,6 +301,7 @@ def execute_agent_loop(
                 rounds += 1
                 provider_started_at = perf_counter()
                 try:
+
                     def _invoke_provider(msgs=request_messages, tools=tool_schemas) -> Any:
                         return client.chat.completions.create(
                             model=model, messages=msgs, tools=tools
@@ -330,6 +329,7 @@ def execute_agent_loop(
                         messages[:] = reactive_compact(messages)
                         request_messages = messages
                         try:
+
                             def _invoke_compact_retry(
                                 msgs=request_messages, tools=tool_schemas
                             ) -> Any:

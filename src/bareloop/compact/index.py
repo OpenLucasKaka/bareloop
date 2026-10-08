@@ -145,4 +145,3 @@ def reactive_compact(messages: list) -> list:
     if len(compacted) > 10:
         return compact_history(compacted)
     return compacted
-

@@ -177,4 +177,3 @@ class AgentTurnUI:
             self._stream.write(badge)
             self._stream.flush()
         self._lines_printed = 0
-

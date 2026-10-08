@@ -449,6 +449,9 @@ def extract_relevant_memories(messages: list, max_items: int = 5):
                     break
         return lines
     except Exception as error:
+        # 清除当前终端行，防止与正在运行的 loading spinner 重叠
+        sys.stderr.write("\r\033[2K")
+        sys.stderr.flush()
         print(f"[memory] selection failed: {error}", file=sys.stderr)
     return []
 

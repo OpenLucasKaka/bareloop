@@ -346,3 +346,27 @@ async def mcp_init() -> list[ToolDefinition]:
 
     print(f"[mcp]: 连接成功 已获取{len(definitions)}个工具")
     return definitions
+
+
+_mcp_init_future: concurrent.futures.Future | None = None
+
+
+def start_background_mcp_init() -> None:
+    """Start MCP discovery in a background thread concurrently with CLI start."""
+    global _mcp_init_future
+    if _mcp_init_future is not None:
+        return
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="mcp-init")
+    _mcp_init_future = executor.submit(lambda: asyncio.run(mcp_init()))
+
+
+def wait_for_mcp_init(timeout: float | None = 15.0) -> list[ToolDefinition]:
+    """Wait for background MCP discovery to complete before running a turn."""
+    global _mcp_init_future
+    if _mcp_init_future is None:
+        return []
+    try:
+        return _mcp_init_future.result(timeout=timeout)
+    except Exception as error:
+        print(f"[mcp] background init failed: {error}", file=sys.stderr)
+        return []

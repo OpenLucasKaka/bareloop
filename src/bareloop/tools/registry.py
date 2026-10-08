@@ -17,9 +17,9 @@ ToolScope = Literal["main", "subagent"]
 
 
 def _parameters(
-        properties: dict[str, Any],
-        required: tuple[str, ...] = (),
-        **constraints: Any,
+    properties: dict[str, Any],
+    required: tuple[str, ...] = (),
+    **constraints: Any,
 ) -> dict[str, Any]:
     return {
         "type": "object",
@@ -275,7 +275,7 @@ _TOOL_DEFINITIONS = (
                     maxLength=64,
                 ),
                 "prompt": _string(),
-                "is_repeat": {"type": "boolean"}
+                "is_repeat": {"type": "boolean"},
             },
             ("cron", "prompt", "is_repeat"),
         ),
@@ -320,6 +320,7 @@ def get_tool_schemas(scope: ToolScope = "main") -> list[dict[str, Any]]:
 
 def get_tool(name: str) -> ToolDefinition | None:
     return _DYNAMIC_TOOLS_BY_NAME.get(name) or _TOOLS_BY_NAME.get(name)
+
 
 def register_dynamic_tools(definitions: list[ToolDefinition]) -> None:
     """

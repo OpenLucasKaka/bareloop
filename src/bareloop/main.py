@@ -29,7 +29,10 @@ from bareloop.goal import GoalController, create_goal_controller  # noqa: E402
 from bareloop.hook import hook as init_hooks  # noqa: E402
 from bareloop.hook import trigger_hook  # noqa: E402, F401
 from bareloop.loop import agent_loop  # noqa: E402
-from bareloop.mcp_integration import mcp_init  # noqa: E402
+from bareloop.mcp_integration import (  # noqa: E402
+    start_background_mcp_init,
+    wait_for_mcp_init,
+)
 from bareloop.mode import AgentMode  # noqa: E402
 from bareloop.settings import (  # noqa: E402
     CLI_STYLE,
@@ -50,6 +53,8 @@ def run_agent_turn_locked(
     mode: AgentMode = AgentMode.NORMAL,
     goal_controller: GoalController | None = None,
 ) -> None:
+    # 确保在真正执行 Agent turn 之前，后台并发进行的 MCP 握手已完成
+    wait_for_mcp_init()
     if user_input is not None:
         if mode == AgentMode.GOAL and goal_controller is not None:
             goal_controller.accept_user_input(user_input)
@@ -131,7 +136,7 @@ async def _wait_for_cli_event(selected_mode: AgentMode) -> tuple[str, str | None
 
 def create_session() -> None:
     init_hooks()
-    asyncio.run(mcp_init())
+    start_background_mcp_init()
     _scan_skills()
     had_teammates = False
     tw = TraceWriter()

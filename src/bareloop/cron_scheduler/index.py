@@ -14,8 +14,9 @@ class CronJob:
     cron: str
     prompt: str
     is_repeat: bool
-    pending_delivery: bool = False # 还未入队
+    pending_delivery: bool = False  # 还未入队
     last_fired: str | None = None
+
 
 DURABLE_CRON_PATH = WORKDIR / ".bareloop" / ".cron_jobs.json"
 cron_start_flag = False
@@ -24,8 +25,8 @@ cron_runtime_list: list[threading.Thread] = []
 runtime_lock = threading.RLock()
 cron_lock = threading.RLock()
 agent_lock = threading.Lock()
-scheduled_jobs: dict[str, CronJob] = {} # 有效的 CronJob
-cron_queue: list[CronJob] = [] # 已经到期、等待进入 Agent Loop 投递的任务
+scheduled_jobs: dict[str, CronJob] = {}  # 有效的 CronJob
+cron_queue: list[CronJob] = []  # 已经到期、等待进入 Agent Loop 投递的任务
 
 
 def _validate_cron_field(field: str, minimum: int, maximum: int) -> str | None:

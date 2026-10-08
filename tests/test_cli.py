@@ -10,14 +10,14 @@ import pytest
 def test_model_loading_initialization():
     """Test ModelLoading class initialization."""
     from bareloop.cli_loading import ModelLoading
-    
+
     # Test with default parameters
     loader = ModelLoading()
     assert loader._text == "thinking…"
     assert loader._stream == sys.stderr
     assert loader._interval == 0.08
     assert loader._enabled is sys.stderr.isatty()
-    
+
     # Test with custom parameters
     custom_stream = StringIO()
     loader = ModelLoading(text="Custom text", stream=custom_stream, interval=0.1)
@@ -29,11 +29,11 @@ def test_model_loading_initialization():
 def test_model_loading_disabled_when_not_tty():
     """Test that ModelLoading is disabled when output is not a TTY."""
     from bareloop.cli_loading import ModelLoading
-    
+
     # Mock a non-TTY stream
     mock_stream = Mock()
     mock_stream.isatty.return_value = False
-    
+
     loader = ModelLoading(stream=mock_stream)
     assert not loader._enabled
 
@@ -43,13 +43,13 @@ def test_model_loading_context_manager():
     from io import StringIO
 
     from bareloop.cli_loading import ModelLoading
-    
+
     output = StringIO()
-    
+
     with ModelLoading(stream=output, enabled=True) as loader:
         # Inside the context, thread should be running (or started)
         assert loader._enabled is True
-    
+
     # After exiting, thread should be stopped and output cleared
     result = output.getvalue()
     # Should have cleared the line
@@ -62,13 +62,13 @@ def test_model_loading_animation():
     from io import StringIO
 
     from bareloop.cli_loading import ModelLoading
-    
+
     output = StringIO()
-    
+
     with ModelLoading(stream=output, interval=0.01, enabled=True):
         # Give it a moment to render a few frames
         time.sleep(0.05)
-    
+
     result = output.getvalue()
     # Should contain animation frames
     assert "thinking…" in result
@@ -77,7 +77,7 @@ def test_model_loading_animation():
 def test_cli_loading_frames():
     """Test that ModelLoading has the expected animation frames."""
     from bareloop.cli_loading import ModelLoading
-    
+
     loader = ModelLoading()
     expected_frames = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
     assert expected_frames == loader.FRAMES
@@ -87,6 +87,7 @@ def test_import_cli_module():
     """Test that the CLI module can be imported successfully."""
     try:
         import bareloop.cli_loading
+
         assert bareloop.cli_loading is not None
     except ImportError as e:
         pytest.fail(f"Failed to import cli_loading module: {e}")

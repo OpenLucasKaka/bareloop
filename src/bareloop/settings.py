@@ -7,7 +7,6 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.filters import to_filter
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
-from transformers import AutoTokenizer
 
 from bareloop.logger import logger  # noqa: F401
 from bareloop.mode import AgentMode
@@ -57,6 +56,8 @@ class LazyTokenizer:
         if not self.model_name:
             raise RuntimeError("TOKENIZER_MODEL must be configured before running the agent loop")
         if self._tokenizer is None:
+            from transformers import AutoTokenizer
+
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         return self._tokenizer
 

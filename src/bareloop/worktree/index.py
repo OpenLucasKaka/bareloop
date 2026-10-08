@@ -287,4 +287,3 @@ def remove_worktree(name: str, force: bool = False, delete_branch: bool = True) 
                 save_task(task)
 
     return f"Worktree '{name}' removed successfully"
-
