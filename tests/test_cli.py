@@ -146,6 +146,74 @@ def test_run_agent_turn_locked_structure():
 def test_create_session_structure():
     """Test the structure of create_session function."""
     from bareloop.mian import create_session
-    
+
     # Test that the function exists and is callable
     assert callable(create_session)
+
+
+def test_format_tool_args_summary():
+    """Test format_tool_args_summary helper for various tools."""
+    from bareloop.cli_loading import format_tool_args_summary
+
+    assert format_tool_args_summary("bash", {"command": "git status"}) == "git status"
+    assert format_tool_args_summary("read", {"path": "README.md"}) == "path='README.md'"
+    assert format_tool_args_summary("glob", {"pattern": "**/*.py"}) == "pattern='**/*.py'"
+    assert format_tool_args_summary("custom", {"foo": "bar"}) == "foo=bar"
+    assert "…" in format_tool_args_summary("bash", {"command": "x" * 60})
+    assert format_tool_args_summary("bash", "raw string argument") == "raw string argument"
+
+
+def test_agent_turn_ui_lifecycle_and_collapse():
+    """Test that AgentTurnUI displays tool executions and collapses on completion."""
+    from io import StringIO
+
+    from bareloop.cli_loading import AgentTurnUI
+
+    stream = StringIO()
+    ui = AgentTurnUI(stream=stream, enabled=True, collapse_on_finish=True)
+    assert ui.enabled is True
+
+    # 1. Start thinking
+    ui.start_thinking(round_num=1)
+    # 2. Start tool
+    ui.start_tool("bash", {"command": "git status"})
+    # 3. Finish tool
+    ui.finish_tool("bash", duration_ms=25.0, outcome="success")
+    # 4. Finish turn (should collapse)
+    ui.finish_turn()
+
+    output = stream.getvalue()
+    # Verifies tool finished indicator was emitted
+    assert "[工具] bash" in output
+    # Verifies collapsed summary badge was rendered
+    assert "已完成思考与工具调用" in output
+    # Verifies cursor-up ANSI codes were used for erasing intermediate lines
+    assert "\033[1A\033[2K" in output
+
+
+def test_loop_execution_result_bool():
+    """Test that LoopExecutionResult evaluates as a boolean based on completed."""
+    from bareloop.loop import LoopExecutionResult
+    from bareloop.telemetry import RunTelemetry, RunTermination
+
+    ok_res = LoopExecutionResult(
+        completed=True,
+        final_output="done",
+        tool_calls=1,
+        rounds=1,
+        model="test",
+        telemetry=RunTelemetry(),
+        termination=RunTermination.COMPLETED,
+    )
+    assert bool(ok_res) is True
+
+    fail_res = LoopExecutionResult(
+        completed=False,
+        final_output="",
+        tool_calls=0,
+        rounds=1,
+        model="test",
+        telemetry=RunTelemetry(),
+        termination=RunTermination.PROVIDER_ERROR,
+    )
+    assert bool(fail_res) is False

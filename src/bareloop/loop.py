@@ -8,7 +8,7 @@ from time import perf_counter
 from typing import Any
 
 from bareloop.background_system import inject_background_results
-from bareloop.cli_loading import ModelLoading
+from bareloop.cli_loading import AgentTurnUI, ModelLoading
 from bareloop.compact import (
     CONTEXT_LIMIT,
     compact_history,
@@ -51,6 +51,9 @@ class LoopExecutionResult:
     model: str | None = None
     telemetry: RunTelemetry = field(default_factory=RunTelemetry)
     termination: RunTermination = RunTermination.COMPLETED
+
+    def __bool__(self) -> bool:
+        return self.completed
 
 
 def _maintain_memories(
@@ -95,7 +98,7 @@ def agent_loop(
         "model_accepted": False
     }
     try:
-        completed = _run_agent_loop(
+        result = _run_agent_loop(
             messages,
             tw,
             fired,
@@ -112,12 +115,13 @@ def agent_loop(
             _remove_messages(messages, scheduled_messages)
             restore_cron_jobs(fired)
         raise
-    if completed or cron_delivery_state["model_accepted"]:
+    if result.completed or cron_delivery_state["model_accepted"]:
         # 负责收尾cron任务
         acknowledge_cron_jobs(fired)
     else:
         _remove_messages(messages, scheduled_messages)
         restore_cron_jobs(fired)
+    return result
 
 
 def _remove_messages(messages: list, removed: list[dict[str, str]]) -> None:
@@ -166,7 +170,7 @@ def _run_agent_loop(
         tool_calls=result.tool_calls,
         termination=result.termination,
     )
-    return result.completed
+    return result
 
 
 def execute_agent_loop(
@@ -209,6 +213,7 @@ def execute_agent_loop(
     tool_calls = 0
     final_output = ""
     telemetry = RunTelemetry()
+    turn_ui = AgentTurnUI(enabled=enable_loading and print_output)
 
     if collect_cron_jobs and trace is not None:
         trace.write(event_type="收集定时任务", data=collect_cron_jobs)
@@ -226,6 +231,7 @@ def execute_agent_loop(
 
     while True:
         if max_rounds is not None and rounds >= max_rounds:
+            turn_ui.finish_turn()
             return LoopExecutionResult(
                 completed=False,
                 final_output=final_output,
@@ -358,6 +364,7 @@ def execute_agent_loop(
                 )
                 message = response.choices[0].message
         except Exception as error:
+            turn_ui.finish_turn()
             if print_output:
                 logger.error(f"Error: {error}")
             return LoopExecutionResult(
@@ -414,6 +421,7 @@ def execute_agent_loop(
                     memory_evidence_messages.append(deepcopy(continuation))
                     continue
                 if not decision.ok:
+                    turn_ui.finish_turn()
                     if print_output:
                         logger.warning(f"[goal blocked] {decision.reason}")
                     return LoopExecutionResult(
@@ -431,6 +439,7 @@ def execute_agent_loop(
             )
             if print_output and hook_tool_count:
                 logger.info(f"本轮对话结束: 共调用工具次数:{hook_tool_count}")
+            turn_ui.finish_turn()
             if enable_finalizers and enable_memory:
                 schedule_memory_maintenance(memory_evidence_messages)
             return LoopExecutionResult(
@@ -449,6 +458,7 @@ def execute_agent_loop(
                 try:
                     normal_tool = normalize_tool_call(tool)
                 except Exception as error:
+                    turn_ui.finish_turn()
                     function = getattr(tool, "function", None)
                     telemetry.tool_calls.append(
                         ToolCallMetric(
@@ -494,12 +504,20 @@ def execute_agent_loop(
                     messages.append(tool_message)
                     memory_evidence_messages.append(deepcopy(tool_message))
                     continue
+                if turn_ui.enabled:
+                    turn_ui.start_tool(normal_tool["name"], normal_tool.get("arguments", {}))
+                tool_started_at = perf_counter()
                 dispatch_result = dispatch_tool_result(
                     normal_tool["name"],
                     normal_tool["arguments"],
                     call_id=normal_tool["id"],
                     workspace=workdir,
                 )
+                tool_duration_ms = (perf_counter() - tool_started_at) * 1000
+                if turn_ui.enabled:
+                    turn_ui.finish_tool(
+                        normal_tool["name"], tool_duration_ms, dispatch_result.outcome
+                    )
                 telemetry.tool_calls.append(
                     ToolCallMetric(
                         name=normal_tool["name"],
