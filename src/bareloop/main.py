@@ -30,6 +30,7 @@ from bareloop.hook import hook as init_hooks  # noqa: E402
 from bareloop.hook import trigger_hook  # noqa: E402, F401
 from bareloop.loop import agent_loop  # noqa: E402
 from bareloop.mcp_integration import (  # noqa: E402
+    mcp_init,  # noqa: F401
     start_background_mcp_init,
     wait_for_mcp_init,
 )
@@ -41,7 +42,7 @@ from bareloop.settings import (  # noqa: E402
     WORKDIR,
     DEFAUlT_MODEL,  # noqa: F401
 )
-from bareloop.skills import _scan_skills, list_skills  # noqa: E402
+from bareloop.skills import SKILL_REGISTRY, _scan_skills, list_skills  # noqa: E402
 from bareloop.trace import TraceWriter  # noqa: E402
 from bareloop.utils import format_team_events  # noqa: E402
 
@@ -78,6 +79,26 @@ def build_system() -> str:
 
         如果工作目录中没有用户需要的普通文件，可以查找工作区之外的目录。
         """
+
+
+def format_cli_help() -> str:
+    skill_word = "skill" if len(SKILL_REGISTRY) == 1 else "skills"
+    return "\n".join(
+        [
+            "Available slash commands:",
+            "  /mode   Toggle Normal / Goal execution mode",
+            "  /help   Show this help message",
+            "  q, quit, exit   Exit the agent session",
+            "",
+            "Keyboard shortcuts:",
+            "  Enter          Send message",
+            "  Esc+Enter      Insert newline",
+            "  Ctrl+J         Insert newline",
+            "",
+            f"Workspace: {WORKDIR}",
+            f"Loaded skills: {len(SKILL_REGISTRY)} {skill_word}",
+        ]
+    )
 
 
 async def wait_for_cli_event(
@@ -126,6 +147,9 @@ async def _wait_for_cli_event(selected_mode: AgentMode) -> tuple[str, str | None
             ).run_async()
             if new_mode is not None:
                 selected_mode = new_mode
+            return "next", None, selected_mode
+        if content == "/help":
+            print(format_cli_help())
             return "next", None, selected_mode
     except (EOFError, KeyboardInterrupt):
         return "quit", None, selected_mode
