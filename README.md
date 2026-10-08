@@ -177,6 +177,9 @@ uv run bareloop
 Press `Enter` to send, `Esc` + `Enter` or `Ctrl` + `J` to insert a newline, and enter `q`,
 `quit`, or `exit` to stop.
 
+Enter `/clear` to clear the conversation history while keeping the initial system prompt and
+current mode, without restarting the CLI.
+
 ### Run interactively in PyCharm
 
 BareLoop uses `prompt_toolkit`, so its Run console needs terminal emulation for interactive input and

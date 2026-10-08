@@ -131,6 +131,8 @@ async def _wait_for_cli_event(selected_mode: AgentMode) -> tuple[str, str | None
         return "quit", None, selected_mode
     if content in {"quit", "q", "exit"}:
         return "quit", None, selected_mode
+    if content == "/clear":
+        return "clear", None, selected_mode
     return "user", content, selected_mode
 
 
@@ -157,6 +159,11 @@ def create_session() -> None:
                     goal_controller.leave_goal_mode()
 
             if kind == "next":
+                continue
+            if kind == "clear":
+                with agent_lock:
+                    del messages[1:]
+                print("Conversation cleared. Start a new topic.\n")
                 continue
             if kind == "user":
                 tw.write(event_type="用户输入", data=input_prompt)
