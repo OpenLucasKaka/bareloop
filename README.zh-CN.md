@@ -210,7 +210,7 @@ BareLoop 先尝试本地地址，再尝试配置的 `MCP_REMOTE_URL`；发现的
 
 ```text
 src/bareloop/
-├── main.py              # CLI 启动与共享 Runtime Session (保留 mian.py 作为兼容别名)
+├── main.py              # CLI 启动与共享 Runtime Session
 ├── loop.py              # 核心 Model/Tool/Result 循环
 ├── tools/               # Tool Schema、注册表、调度器和内置工具
 ├── hook/                # 权限与生命周期 Hooks

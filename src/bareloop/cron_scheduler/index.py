@@ -213,7 +213,7 @@ def queue_processor_loop(
             continue
         try:
             if has_cron_queue():
-                from bareloop.mian import run_agent_turn_locked
+                from bareloop.main import run_agent_turn_locked
 
                 run_agent_turn_locked(messages, trace_writer)
         finally:

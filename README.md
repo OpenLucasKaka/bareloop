@@ -225,7 +225,7 @@ endpoint carrying `MCP_REMOTE_TOKEN` must use HTTPS; loopback HTTP remains avail
 
 ```text
 src/bareloop/
-├── main.py              # CLI bootstrap and shared runtime session (mian.py kept as alias)
+├── main.py              # CLI bootstrap and shared runtime session
 ├── loop.py              # Core model/tool/result loop
 ├── tools/               # Tool schemas, registry, dispatcher, and built-ins
 ├── hook/                # Permission and lifecycle hooks

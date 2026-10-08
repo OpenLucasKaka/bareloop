@@ -118,26 +118,26 @@ def test_live_evaluator_uses_separate_messages_and_persistent_goal_payload() -> 
 
 
 def test_only_direct_goal_mode_input_updates_goal(monkeypatch: pytest.MonkeyPatch) -> None:
-    from bareloop import mian
+    from bareloop import main
 
     controller = GoalController(lambda *_args: GoalDecision(True, "done"))
     messages = [{"role": "system", "content": "system"}]
     calls = []
-    monkeypatch.setattr(mian, "trigger_hook", lambda *_args: None)
-    monkeypatch.setattr(mian, "agent_loop", lambda *args: calls.append(args))
+    monkeypatch.setattr(main, "trigger_hook", lambda *_args: None)
+    monkeypatch.setattr(main, "agent_loop", lambda *args: calls.append(args))
 
-    mian.run_agent_turn_locked(
+    main.run_agent_turn_locked(
         messages,
         SimpleNamespace(),
         "fix login",
-        mian.AgentMode.GOAL,
+        main.AgentMode.GOAL,
         controller,
     )
-    mian.run_agent_turn_locked(
+    main.run_agent_turn_locked(
         messages,
         SimpleNamespace(),
         None,
-        mian.AgentMode.GOAL,
+        main.AgentMode.GOAL,
         controller,
     )
 

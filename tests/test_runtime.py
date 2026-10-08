@@ -426,7 +426,7 @@ def test_builtin_tool_schemas_expose_optional_cwd() -> None:
 
 
 def test_cli_wait_wakes_while_prompt_is_pending(monkeypatch: pytest.MonkeyPatch) -> None:
-    from bareloop import mian
+    from bareloop import main as mian
 
     never_finishes = asyncio.Event()
 
@@ -443,7 +443,7 @@ def test_cli_wait_wakes_while_prompt_is_pending(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_cli_mode_prompts_keep_input_label_fixed(monkeypatch: pytest.MonkeyPatch) -> None:
-    from bareloop import mian
+    from bareloop import main as mian
 
     prompts = []
 
@@ -494,7 +494,7 @@ def test_pre_user_prompt_hook_does_not_print_cwd(monkeypatch: pytest.MonkeyPatch
 
 
 def test_cli_prompt_uses_gray_placeholder(monkeypatch: pytest.MonkeyPatch) -> None:
-    from bareloop import mian
+    from bareloop import main as mian
 
     prompt_options = {}
 
@@ -515,7 +515,7 @@ def test_cli_prompt_uses_gray_placeholder(monkeypatch: pytest.MonkeyPatch) -> No
 def test_create_session_starts_with_configured_default_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from bareloop import mian
+    from bareloop import main as mian
 
     received_modes = []
 
@@ -547,7 +547,7 @@ def test_cli_prompt_protects_input_from_background_output(
 ) -> None:
     from contextlib import contextmanager
 
-    from bareloop import mian
+    from bareloop import main as mian
 
     events = []
 
@@ -576,7 +576,7 @@ def test_cli_prompt_protects_input_from_background_output(
 def test_cli_mode_command_can_switch_back_to_normal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from bareloop import mian
+    from bareloop import main as mian
 
     class FakeDialog:
         async def run_async(self):
@@ -594,7 +594,7 @@ def test_cli_mode_command_can_switch_back_to_normal(
 
 
 def test_cli_quit_result_preserves_current_mode(monkeypatch: pytest.MonkeyPatch) -> None:
-    from bareloop import mian
+    from bareloop import main as mian
 
     async def prompt_async(_prompt: str, **_kwargs) -> str:
         return "quit"
@@ -609,7 +609,7 @@ def test_cli_quit_result_preserves_current_mode(monkeypatch: pytest.MonkeyPatch)
 def test_queue_processor_passes_shared_session_and_releases_lock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import bareloop.mian as mian
+    import bareloop.main as mian
     from bareloop.cron_scheduler import index as cron
 
     messages = [{"role": "system", "content": "system"}]

@@ -15,12 +15,11 @@ from bareloop.worktree import remove_worktree
 
 
 def test_naming_and_entrypoint_aliases() -> None:
-    from bareloop import main, mian
+    from bareloop import main
 
     assert main.create_session is not None
     assert main.init_agent is not None
     assert main.main is not None
-    assert mian.create_session is not None
     assert DEFAULT_MODE == AgentMode.NORMAL
     assert DEFAULT_MODEL == AgentMode.NORMAL
     assert DEFAUlT_MODEL == AgentMode.NORMAL

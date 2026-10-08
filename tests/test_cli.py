@@ -96,32 +96,33 @@ def test_import_main_module():
     """Test that the main module can be imported successfully."""
     # This will test if all dependencies are properly set up
     try:
-        from bareloop import main, mian
+        from bareloop import main
+
         assert main is not None
-        assert mian is not None
     except ImportError as e:
-        pytest.fail(f"Failed to import mian module: {e}")
+        pytest.fail(f"Failed to import main module: {e}")
 
 
 def test_wait_for_cli_event_structure():
     """Test the structure of wait_for_cli_event function."""
-    from bareloop.mian import wait_for_cli_event
-    
+    from bareloop.main import wait_for_cli_event
+
     # Test that the function exists and is callable
     assert callable(wait_for_cli_event)
-    
+
     # Check function signature
     import inspect
+
     sig = inspect.signature(wait_for_cli_event)
-    assert 'selected_mode' in sig.parameters
+    assert "selected_mode" in sig.parameters
 
 
 def test_build_system_function():
     """Test the build_system function."""
-    from bareloop.mian import build_system
-    
+    from bareloop.main import build_system
+
     system_prompt = build_system()
-    
+
     # System prompt should contain expected elements
     assert "coding agent" in system_prompt.lower() or "coding" in system_prompt.lower()
     assert "Skill" in system_prompt  # Should mention Skills
@@ -129,23 +130,24 @@ def test_build_system_function():
 
 def test_run_agent_turn_locked_structure():
     """Test the structure of run_agent_turn_locked function."""
-    from bareloop.mian import run_agent_turn_locked
-    
+    from bareloop.main import run_agent_turn_locked
+
     # Test that the function exists and is callable
     assert callable(run_agent_turn_locked)
-    
+
     # Check function signature
     import inspect
+
     sig = inspect.signature(run_agent_turn_locked)
     params = list(sig.parameters.keys())
-    assert 'messages' in params
-    assert 'tw' in params  # TraceWriter
-    assert 'user_input' in params
+    assert "messages" in params
+    assert "tw" in params  # TraceWriter
+    assert "user_input" in params
 
 
 def test_create_session_structure():
     """Test the structure of create_session function."""
-    from bareloop.mian import create_session
+    from bareloop.main import create_session
 
     # Test that the function exists and is callable
     assert callable(create_session)
