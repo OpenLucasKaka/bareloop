@@ -6,6 +6,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from bareloop.logger import logger
 from bareloop.settings import WORKDIR
 from bareloop.task_system import (
     Task,
@@ -235,7 +236,7 @@ def create_worktree(name: str, task_id: str) -> str:
                 "Created Git worktree and branch were rolled back."
             )
 
-    print(f"  \033[33m[worktree] created: {name} at {path}\033[0m")
+    logger.info(f"[worktree] created: {name} at {path}")
     return f"Worktree '{name}' created at {path} for task {task_id}"
 
 

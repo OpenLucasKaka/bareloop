@@ -54,7 +54,9 @@ def run_agent_turn_locked(
         if mode == AgentMode.GOAL and goal_controller is not None:
             goal_controller.accept_user_input(user_input)
         messages.append({"role": "user", "content": user_input})
-    agent_loop(messages, tw, mode, goal_controller)
+    result = agent_loop(messages, tw, mode, goal_controller)
+    if result and result.final_output:
+        print(result.final_output)
 
 
 def build_system() -> str:

@@ -3,6 +3,7 @@ import json
 import re
 import time
 
+from bareloop.logger import logger
 from bareloop.settings import PRIMARY_MODEL, WORKDIR, client
 
 KEEP_RECENT = 50
@@ -113,7 +114,7 @@ def summarize_history(messages):
 
 def compact_history(messages):
     transcript_path = write_transcript(messages)
-    print(f"{transcript_path}")
+    logger.info(f"{transcript_path}")
     summarize = summarize_history(messages)
     instructions = [
         message for message in messages if message.get("role") in {"system", "developer"}

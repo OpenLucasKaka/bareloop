@@ -19,6 +19,7 @@ from bareloop.compact import (
 from bareloop.cron_scheduler import acknowledge_cron_jobs, consume_cron_queue, restore_cron_jobs
 from bareloop.goal import GoalController, stop_goal_gate
 from bareloop.hook import trigger_hook
+from bareloop.logger import logger
 from bareloop.memory import consolidate_memories, extract_memories, load_memories
 from bareloop.mode import AgentMode
 from bareloop.settings import PRIMARY_MODEL, client, tokenizer
@@ -217,7 +218,7 @@ def execute_agent_loop(
         scheduled_messages.append(scheduled_message)
         memory_evidence_messages.append(deepcopy(scheduled_message))
         if print_output:
-            print(f"  [cron] delivered {job.id}: {job.prompt[:60]}")
+            logger.info(f"  [cron] delivered {job.id}: {job.prompt[:60]}")
 
     # 记录当前轮次用于提醒当前规划任务
     rounds_since_todo = 0
@@ -277,7 +278,7 @@ def execute_agent_loop(
                 #压缩策略L2: 超过content限制主动压缩
                 if len(current_token) > CONTEXT_LIMIT:
                     if print_output:
-                        print("[auto compact]")
+                        logger.info("[auto compact]")
                     messages[:] = compact_history(messages)
                 request_messages = messages
                 if memories_content:
@@ -319,7 +320,7 @@ def execute_agent_loop(
                     if is_overflow and not provider_failed:
                         provider_failed = True
                         if print_output:
-                            print("[reactive compact on context overflow]")
+                            logger.warning("[reactive compact on context overflow]")
                         messages[:] = reactive_compact(messages)
                         request_messages = messages
                         try:
@@ -358,7 +359,7 @@ def execute_agent_loop(
                 message = response.choices[0].message
         except Exception as error:
             if print_output:
-                print(f"Error: {error}")
+                logger.error(f"Error: {error}")
             return LoopExecutionResult(
                 completed=False,
                 final_output=final_output,
@@ -414,8 +415,7 @@ def execute_agent_loop(
                     continue
                 if not decision.ok:
                     if print_output:
-                        print(message.content)
-                        print(f"[goal blocked] {decision.reason}")
+                        logger.warning(f"[goal blocked] {decision.reason}")
                     return LoopExecutionResult(
                         completed=False,
                         final_output=final_output,
@@ -429,10 +429,8 @@ def execute_agent_loop(
             hook_tool_count = (
                 trigger_hook("Stop", messages) if enable_finalizers and enable_hooks else None
             )
-            if print_output:
-                print(message.content)
-                if hook_tool_count:
-                    print(f"本轮对话结束: 共调用工具次数:{hook_tool_count}")
+            if print_output and hook_tool_count:
+                logger.info(f"本轮对话结束: 共调用工具次数:{hook_tool_count}")
             if enable_finalizers and enable_memory:
                 schedule_memory_maintenance(memory_evidence_messages)
             return LoopExecutionResult(
@@ -460,7 +458,7 @@ def execute_agent_loop(
                         )
                     )
                     if print_output:
-                        print(f"Error: {error}")
+                        logger.error(f"Error: {error}")
                     return LoopExecutionResult(
                         completed=False,
                         final_output=final_output,

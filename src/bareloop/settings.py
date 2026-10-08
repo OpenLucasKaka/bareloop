@@ -9,6 +9,7 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
 from transformers import AutoTokenizer
 
+from bareloop.logger import logger  # noqa: F401
 from bareloop.mode import AgentMode
 
 WORKDIR = Path.cwd().resolve()

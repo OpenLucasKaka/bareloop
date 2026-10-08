@@ -239,6 +239,7 @@ def test_incomplete_goal_continues_same_loop_then_finalizes_once(
 def test_impossible_goal_returns_control_without_finalizers(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     loop, model_calls = _prepare_agent_loop(monkeypatch, ["need user input"])
     controller = GoalController(
@@ -271,4 +272,4 @@ def test_impossible_goal_returns_control_without_finalizers(
     assert len(model_calls) == 1
     assert stop_events == []
     assert memory_turns == []
-    assert "[goal blocked] missing credentials" in capsys.readouterr().out
+    assert "[goal blocked] missing credentials" in (capsys.readouterr().out + caplog.text)
