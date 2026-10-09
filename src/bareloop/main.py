@@ -30,7 +30,6 @@ from bareloop.hook import hook as init_hooks  # noqa: E402
 from bareloop.hook import trigger_hook  # noqa: E402, F401
 from bareloop.loop import agent_loop  # noqa: E402
 from bareloop.mcp_integration import (  # noqa: E402
-    mcp_init,  # noqa: F401
     start_background_mcp_init,
     wait_for_mcp_init,
 )
@@ -87,6 +86,7 @@ def format_cli_help() -> str:
         [
             "Available slash commands:",
             "  /mode   Toggle Normal / Goal execution mode",
+            "  /clear  Reset conversation context",
             "  /help   Show this help message",
             "  q, quit, exit   Exit the agent session",
             "",

@@ -146,6 +146,7 @@ def test_format_cli_help_includes_commands_and_context(monkeypatch):
     help_text = main.format_cli_help()
 
     assert "/mode" in help_text
+    assert "/clear" in help_text
     assert "/help" in help_text
     assert "q, quit, exit" in help_text
     assert "Esc+Enter" in help_text
