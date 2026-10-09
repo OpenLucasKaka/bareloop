@@ -519,7 +519,7 @@ def test_create_session_starts_with_configured_default_mode(
 
     received_modes = []
 
-    async def fake_mcp_init() -> None:
+    def fake_mcp_init() -> None:
         return None
 
     async def fake_wait_for_cli_event(selected_mode):
@@ -531,7 +531,7 @@ def test_create_session_starts_with_configured_default_mode(
             return None
 
     monkeypatch.setattr(mian, "init_hooks", lambda: None)
-    monkeypatch.setattr(mian, "mcp_init", fake_mcp_init)
+    monkeypatch.setattr(mian, "start_background_mcp_init", fake_mcp_init)
     monkeypatch.setattr(mian, "_scan_skills", lambda: None)
     monkeypatch.setattr(mian, "TraceWriter", FakeTraceWriter)
     monkeypatch.setattr(mian, "start_cron_scheduler", lambda *_args: None)
@@ -539,7 +539,7 @@ def test_create_session_starts_with_configured_default_mode(
 
     mian.create_session()
 
-    assert received_modes == [mian.DEFAUlT_MODEL]
+    assert received_modes == [mian.DEFAULT_MODE]
 
 
 def test_cli_prompt_protects_input_from_background_output(

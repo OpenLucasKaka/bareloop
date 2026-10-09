@@ -2,7 +2,7 @@
 
 import sys
 from io import StringIO
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest
 
@@ -220,3 +220,72 @@ def test_loop_execution_result_bool():
         termination=RunTermination.PROVIDER_ERROR,
     )
     assert bool(fail_res) is False
+
+
+@pytest.mark.parametrize("mode_name", ["NORMAL", "GOAL"])
+def test_clear_command_is_a_local_event(monkeypatch, mode_name):
+    import asyncio
+
+    from bareloop import main
+
+    mode = getattr(main.AgentMode, mode_name)
+
+    async def prompt_async(*_args, **_kwargs):
+        return "/clear"
+
+    monkeypatch.setattr(main.PROMPT_SESSION, "prompt_async", prompt_async)
+    monkeypatch.setattr(main.BUS, "peek", lambda _recipient: [])
+
+    assert asyncio.run(main.wait_for_cli_event(mode)) == ("clear", None, mode)
+
+
+@pytest.mark.parametrize("with_history", [False, True])
+def test_clear_preserves_shared_session_and_skips_agent_turn(monkeypatch, capsys, with_history):
+    from bareloop import main
+
+    shared_messages = []
+    snapshots = []
+    events = iter(["clear", "clear", "user", "quit"])
+    trace = Mock()
+    agent_turn = Mock()
+
+    def capture_session(messages, _trace):
+        shared_messages.append(messages)
+        if with_history:
+            messages.extend(
+                [
+                    {"role": "user", "content": "old topic"},
+                    {"role": "assistant", "content": "old answer"},
+                    {"role": "tool", "content": "old result", "tool_call_id": "old"},
+                ]
+            )
+
+    async def wait_for_event(mode):
+        kind = next(events)
+        snapshots.append(list(shared_messages[0]))
+        return kind, "new topic" if kind == "user" else None, mode
+
+    monkeypatch.setattr(main, "init_hooks", lambda: None)
+    monkeypatch.setattr(main, "start_background_mcp_init", lambda: None)
+    monkeypatch.setattr(main, "_scan_skills", lambda: None)
+    monkeypatch.setattr(main, "build_system", lambda: "initial system prompt")
+    monkeypatch.setattr(main, "TraceWriter", lambda: trace)
+    monkeypatch.setattr(main, "start_cron_scheduler", capture_session)
+    monkeypatch.setattr(main, "wait_for_cli_event", wait_for_event)
+    monkeypatch.setattr(main, "run_agent_turn_locked", agent_turn)
+    monkeypatch.setattr(main, "active_teammates", {})
+
+    main.create_session()
+
+    expected = [{"role": "system", "content": "initial system prompt"}]
+    assert snapshots[1:] == [expected, expected, expected]
+    assert shared_messages[0] == expected
+    assert agent_turn.call_count == 1
+    args = agent_turn.call_args.args
+    assert args[0] is shared_messages[0]
+    assert args[1:4] == (trace, "new topic", main.DEFAULT_MODE)
+    assert capsys.readouterr().out.count("Conversation cleared.") == 2
+    assert trace.write.call_args_list == [
+        call(event_type="用户输入", data="new topic"),
+        call(event_type="停止对话"),
+    ]
