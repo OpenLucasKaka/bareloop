@@ -129,6 +129,52 @@ def test_build_system_function():
     assert "Skill" in system_prompt  # Should mention Skills
 
 
+def test_format_cli_help_includes_commands_and_context(monkeypatch):
+    """Test that /help output lists commands and runtime context."""
+    import bareloop.main as main
+
+    monkeypatch.setattr(main, "WORKDIR", "/tmp/workspace")
+    monkeypatch.setattr(
+        main,
+        "SKILL_REGISTRY",
+        {
+            "planner": {"name": "planner", "description": "Plan work"},
+            "tester": {"name": "tester", "description": "Test work"},
+        },
+    )
+
+    help_text = main.format_cli_help()
+
+    assert "/mode" in help_text
+    assert "/clear" in help_text
+    assert "/help" in help_text
+    assert "q, quit, exit" in help_text
+    assert "Esc+Enter" in help_text
+    assert "Ctrl+J" in help_text
+    assert "Workspace: /tmp/workspace" in help_text
+    assert "Loaded skills: 2 skills" in help_text
+
+
+def test_wait_for_cli_event_handles_help(monkeypatch, capsys):
+    """Test that /help is handled locally without starting an agent turn."""
+    import asyncio
+    from types import SimpleNamespace
+
+    import bareloop.main as main
+    from bareloop.mode import AgentMode
+
+    async def prompt_async(*args, **kwargs):
+        return "/help"
+
+    monkeypatch.setattr(main, "PROMPT_SESSION", SimpleNamespace(prompt_async=prompt_async))
+    monkeypatch.setattr(main, "format_cli_help", lambda: "help text")
+
+    kind, content, mode = asyncio.run(main._wait_for_cli_event(AgentMode.NORMAL))
+
+    assert (kind, content, mode) == ("next", None, AgentMode.NORMAL)
+    assert "help text" in capsys.readouterr().out
+
+
 def test_run_agent_turn_locked_structure():
     """Test the structure of run_agent_turn_locked function."""
     from bareloop.main import run_agent_turn_locked
