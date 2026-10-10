@@ -278,10 +278,12 @@ Use repeatable `--model MODEL_ID` arguments to select an explicit compatibility 
 remain unavailable rather than being estimated.
 
 Each run directory contains `report.json`, `runs.csv`, and a self-contained `report.html` with
-inline SVG charts. `task_success_rate` measures deterministic task completion;
-`harness_integrity_rate` separately measures internal and containment stability. Reports classify
-Provider errors, invalid Tool calls, round exhaustion, safety violations, harness errors, and
-recovered Tool errors. Five repetitions are exploratory, so p95 is not a production SLO.
+inline SVG charts. The evaluation spans three core dimensions:
+- **Task Correctness & Safety**: `task_success_rate` measures deterministic file-state completion; `harness_integrity_rate` evaluates sandbox integrity without internal errors or path escape violations.
+- **Execution Reliability & Resilience**: Tracks `provider_success_rate` (LLM call success), `tool_dispatch_success_rate` (tool dispatch success), `invalid_tool_call_rate` (schema/format errors), `tool_error_recovery_rate` (autonomous recovery after tool failures), and `max_rounds_rate` (round exhaustion).
+- **Latency, Token & Cost Distribution**: Profiles end-to-end `duration_ms`, `provider_latency_ms`, round counts `rounds`, tool invocations `tool_calls`, token usage, and total USD expenses `total_cost_usd` (aggregating mean, median, and p95).
+
+The 6 built-in test cases comprehensively cover basic write (`write-answer`), in-place editing (`edit-existing`), nested path discovery (`discover-and-copy`), multi-file atomic edits (`multi-file-update`), tool error recovery (`recover-tool-error`), and workspace containment sandboxing (`workspace-containment`). Five repetitions are exploratory, so p95 is not a production SLO.
 
 Compare with a prior immutable report using `--baseline PATH/report.json`. Live artifacts remain
 under ignored `.bareloop/`; promoting a baseline is an explicit reviewed action.
@@ -296,6 +298,19 @@ configured Provider models), use:
 The command writes suite-local `telemetry.jsonl` next to the eval report, then updates the marked
 dashboard block and `docs/assets/telemetry-dashboard.svg`. Set `REPETITIONS` or `OUTPUT_DIR` to
 override the defaults.
+
+### Third-party Benchmark: SWE-bench Adapter
+
+BareLoop provides an official-spec SWE-bench / SWE-bench Lite adapter. It consumes standard issue datasets, executes the BareLoop agent loop across isolated git workspaces, and outputs standard `predictions.jsonl` containing the `instance_id` and the extracted unified git `model_patch`:
+
+```bash
+uv run python -m bareloop.eval.swebench \
+  --dataset-path evals/swebench/sample_instances.jsonl \
+  --repo-dir /path/to/target-repo \
+  --output-dir .bareloop/eval/swebench
+```
+
+The resulting `predictions.jsonl` directly plugs into the official SWE-bench docker harness (`swebench.harness.run_evaluation`) for third-party regression testing and leaderboard scoring.
 
 ## Project status
 
@@ -315,17 +330,17 @@ BareLoop is released under the [MIT License](LICENSE).
 
 | Metric | Value |
 | --- | --- |
-| Run count | 90 |
-| Completion rate | 66.7% |
-| Provider success rate | 86.8% |
-| Provider latency (mean / P50 / P95) | 1045.9 / 987.4 / 2065.8 ms |
-| Token usage (runs with provider usage) | 60 |
-| Input / output / total tokens | 173336 / 10927 / 184263 |
-| Tool calls (success rate) | 162 (87.0%) |
-| Tool errors / blocked / invalid | 11 / 10 / 0 |
-| Security blocks / safety violations | 10 / 0 |
-| Terminations | completed: 60, provider_error: 30 |
-| Last updated | 2026-09-13T12:52:09.615382+00:00 |
+| Run count | 18 |
+| Completion rate | 100.0% |
+| Provider success rate | 100.0% |
+| Provider latency (mean / P50 / P95) | 1543.9 / 1359.1 / 2851.8 ms |
+| Token usage (runs with provider usage) | 18 |
+| Input / output / total tokens | 44682 / 2604 / 47286 |
+| Tool calls (success rate) | 44 (86.4%) |
+| Tool errors / blocked / invalid | 3 / 3 / 0 |
+| Security blocks / safety violations | 3 / 0 |
+| Terminations | completed: 18 |
+| Last updated | 2026-10-10T05:49:31.471778+00:00 |
 
-_Generated from `.bareloop/eval/runs/20260913T124358Z/telemetry.jsonl`. Token totals include only records with provider-reported usage._
+_Generated from `.bareloop/eval/runs/test_run/telemetry.jsonl`. Token totals include only records with provider-reported usage._
 <!-- telemetry-dashboard:end -->

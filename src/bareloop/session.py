@@ -38,6 +38,7 @@ class AgentSession:
         max_rounds: int,
         trace: Any | None,
         telemetry_path: str | Path | None = None,
+        allowed_tool_names: frozenset[str] | set[str] | None = None,
     ) -> None:
         if max_rounds < 1:
             raise ValueError("max_rounds must be at least 1")
@@ -48,6 +49,9 @@ class AgentSession:
         self.tokenizer = tokenizer_instance
         self.max_rounds = max_rounds
         self.trace = trace
+        self.allowed_tool_names = (
+            frozenset(allowed_tool_names) if allowed_tool_names is not None else _EVAL_TOOL_NAMES
+        )
         self.telemetry_path = (
             Path(telemetry_path)
             if telemetry_path is not None
@@ -65,7 +69,7 @@ class AgentSession:
             tokenizer=self.tokenizer,
             workdir=self.workdir,
             max_rounds=self.max_rounds,
-            allowed_tool_names=_EVAL_TOOL_NAMES,
+            allowed_tool_names=self.allowed_tool_names,
             trace=self.trace,
             enable_background=False,
             enable_memory=False,
