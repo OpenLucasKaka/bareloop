@@ -257,15 +257,12 @@ uv run python -m bareloop.eval \
 `evals/model-pricing.example.yaml` 并填入已核实价格，再传入 `--pricing`。Token 必须来自
 Provider usage，缺失 usage 或价格时明确显示 unavailable，不使用估算值冒充正式数据。
 
-每次运行生成 `report.json`、`runs.csv` 和包含内联 SVG 统计图的独立 `report.html`。评测从三大维度进行综合度量：
-- **任务正确性与安全**：`task_success_rate`（通过文件状态精准匹配衡量任务闭环率）与 `harness_integrity_rate`（排除内部异常与越界逃逸，衡量沙箱健壮性）。
-- **执行稳定性与容错**：覆盖 `provider_success_rate`（模型响应成功率）、`tool_dispatch_success_rate`（工具调度成功率）、`invalid_tool_call_rate`（非法调用率）、`tool_error_recovery_rate`（遇到 Tool 报错后的自主恢复率）及 `max_rounds_rate`（轮数耗尽率）。
-- **性能、Token 与成本分布**：统计端到端耗时 `duration_ms`、Provider 延迟 `provider_latency_ms`、交互轮数 `rounds`、工具调用频次 `tool_calls`、Token 消耗以及基于定价表核算的美金成本 `total_cost_usd`（均计算均值、中位数与 P95）。
+评测套件通过 6 个真实场景（单步写入、就地修改、深层查找、多文件协同、报错自愈及沙箱越界拦截），综合度量三个核心维度：
+- **任务正确与安全**：最终文件产物是否精确达标，沙箱越界是否被有效阻断；
+- **稳定性与容错**：工具调用合法性、遇到 Tool 报错时的自主恢复能力；
+- **效率与开销**：响应延迟、交互轮数、Token 消耗与美金成本。
 
-内置的 6 个标准 Case 分别覆盖了单步写入（`write-answer`）、就地修改（`edit-existing`）、多层定位拷贝（`discover-and-copy`）、多文件协同（`multi-file-update`）、报错自愈（`recover-tool-error`）以及沙箱越界阻断（`workspace-containment`）。五次重复属于探索性样本，p95 不能作为生产 SLO。
-
-使用 `--baseline PATH/report.json` 可与历史报告比较。真实运行产物保存在 Git 忽略的
-`.bareloop/` 下，baseline 只应在人工审查后显式提升。
+运行后会自动生成包含可视化图表的独立 `report.html`、`report.json` 和 `runs.csv`，并支持通过 `--baseline` 进行版本回归比对。
 
 ### 第三方基准评测：SWE-bench 适配器
 

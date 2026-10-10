@@ -277,16 +277,12 @@ Use repeatable `--model MODEL_ID` arguments to select an explicit compatibility 
 `evals/model-pricing.example.yaml` and enter verified prices first. Missing Provider usage or prices
 remain unavailable rather than being estimated.
 
-Each run directory contains `report.json`, `runs.csv`, and a self-contained `report.html` with
-inline SVG charts. The evaluation spans three core dimensions:
-- **Task Correctness & Safety**: `task_success_rate` measures deterministic file-state completion; `harness_integrity_rate` evaluates sandbox integrity without internal errors or path escape violations.
-- **Execution Reliability & Resilience**: Tracks `provider_success_rate` (LLM call success), `tool_dispatch_success_rate` (tool dispatch success), `invalid_tool_call_rate` (schema/format errors), `tool_error_recovery_rate` (autonomous recovery after tool failures), and `max_rounds_rate` (round exhaustion).
-- **Latency, Token & Cost Distribution**: Profiles end-to-end `duration_ms`, `provider_latency_ms`, round counts `rounds`, tool invocations `tool_calls`, token usage, and total USD expenses `total_cost_usd` (aggregating mean, median, and p95).
+The evaluation suite runs across 6 real-world scenarios (basic writes, in-place editing, nested search, multi-file updates, error recovery, and sandbox path containment) to assess three core capabilities:
+- **Correctness & Safety**: Exact file-state matching and sandbox escape prevention.
+- **Reliability & Resilience**: Valid tool usage and autonomous recovery from tool errors.
+- **Efficiency & Cost**: Response latency, round counts, token usage, and dollar costs.
 
-The 6 built-in test cases comprehensively cover basic write (`write-answer`), in-place editing (`edit-existing`), nested path discovery (`discover-and-copy`), multi-file atomic edits (`multi-file-update`), tool error recovery (`recover-tool-error`), and workspace containment sandboxing (`workspace-containment`). Five repetitions are exploratory, so p95 is not a production SLO.
-
-Compare with a prior immutable report using `--baseline PATH/report.json`. Live artifacts remain
-under ignored `.bareloop/`; promoting a baseline is an explicit reviewed action.
+Each run automatically generates an interactive `report.html` (with inline charts), `report.json`, and `runs.csv`, and supports `--baseline` regression comparisons.
 
 ### Third-party Benchmark: SWE-bench Adapter
 
