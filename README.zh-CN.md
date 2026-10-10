@@ -267,16 +267,6 @@ Provider usage，缺失 usage 或价格时明确显示 unavailable，不使用�
 使用 `--baseline PATH/report.json` 可与历史报告比较。真实运行产物保存在 Git 忽略的
 `.bareloop/` 下，baseline 只应在人工审查后显式提升。
 
-要一键运行完整 Suite，并自动刷新 README telemetry 表格和 SVG 图表（需要已配置的 Provider
-模型），执行：
-
-```bash
-./scripts/update-telemetry-dashboard.sh
-```
-
-脚本会把本次 Suite 的 `telemetry.jsonl` 写在评测报告目录旁，再更新 README 中的标记区块和
-`docs/assets/telemetry-dashboard.svg`。可通过 `REPETITIONS` 或 `OUTPUT_DIR` 覆盖默认值。
-
 ### 第三方基准评测：SWE-bench 适配器
 
 BareLoop 提供了符合官方规范的 SWE-bench / SWE-bench Lite 评测套件，可直接读取标准 Issue 数据集并在隔离代码仓库中派发 Agent 会话，最终输出标准的 `predictions.jsonl`（包含 `instance_id` 与生成的 unified git patch）：
@@ -300,24 +290,3 @@ Public API 稳定性仍在开发中。现阶段请以源码和测试作为行为
 
 BareLoop 使用 [MIT License](LICENSE)。
 
-<!-- telemetry-dashboard:start -->
-### Runtime telemetry
-
-![Runtime telemetry dashboard](docs/assets/telemetry-dashboard.svg)
-
-| Metric | Value |
-| --- | --- |
-| Run count | 18 |
-| Completion rate | 100.0% |
-| Provider success rate | 100.0% |
-| Provider latency (mean / P50 / P95) | 1543.9 / 1359.1 / 2851.8 ms |
-| Token usage (runs with provider usage) | 18 |
-| Input / output / total tokens | 44682 / 2604 / 47286 |
-| Tool calls (success rate) | 44 (86.4%) |
-| Tool errors / blocked / invalid | 3 / 3 / 0 |
-| Security blocks / safety violations | 3 / 0 |
-| Terminations | completed: 18 |
-| Last updated | 2026-10-10T05:49:31.471778+00:00 |
-
-_Generated from `.bareloop/eval/runs/test_run/telemetry.jsonl`. Token totals include only records with provider-reported usage._
-<!-- telemetry-dashboard:end -->

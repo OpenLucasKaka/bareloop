@@ -137,7 +137,7 @@ def render_svg(summary: dict[str, Any]) -> str:
         ("Safety", 100.0 if summary["safety_violations"] == 0 and summary["run_count"] else 0.0),
     ]
     width, height = 720, 300
-    chart_left, chart_top, chart_height = 64, 42, 190
+    chart_left, chart_top, chart_height = 64, 62, 170
     bar_width = 100
     gap = 46
     max_value = 100.0
@@ -155,7 +155,7 @@ def render_svg(summary: dict[str, Any]) -> str:
             f'text-anchor="middle" fill="#cbd5e1" font-size="14">{escape(label)}</text>'
         )
         bars.append(
-            f'<text x="{x + bar_width / 2:.1f}" y="{max(y - 8, 26):.1f}" '
+            f'<text x="{x + bar_width / 2:.1f}" y="{y - 10:.1f}" '
             f'text-anchor="middle" fill="#f8fafc" font-size="15">{value:.1f}%</text>'
         )
     return (

@@ -288,17 +288,6 @@ The 6 built-in test cases comprehensively cover basic write (`write-answer`), in
 Compare with a prior immutable report using `--baseline PATH/report.json`. Live artifacts remain
 under ignored `.bareloop/`; promoting a baseline is an explicit reviewed action.
 
-To run the suite and refresh the README telemetry table and SVG chart in one command (requires the
-configured Provider models), use:
-
-```bash
-./scripts/update-telemetry-dashboard.sh
-```
-
-The command writes suite-local `telemetry.jsonl` next to the eval report, then updates the marked
-dashboard block and `docs/assets/telemetry-dashboard.svg`. Set `REPETITIONS` or `OUTPUT_DIR` to
-override the defaults.
-
 ### Third-party Benchmark: SWE-bench Adapter
 
 BareLoop provides an official-spec SWE-bench / SWE-bench Lite adapter. It consumes standard issue datasets, executes the BareLoop agent loop across isolated git workspaces, and outputs standard `predictions.jsonl` containing the `instance_id` and the extracted unified git `model_patch`:
@@ -323,24 +312,3 @@ the source and tests as the current contract.
 
 BareLoop is released under the [MIT License](LICENSE).
 
-<!-- telemetry-dashboard:start -->
-### Runtime telemetry
-
-![Runtime telemetry dashboard](docs/assets/telemetry-dashboard.svg)
-
-| Metric | Value |
-| --- | --- |
-| Run count | 18 |
-| Completion rate | 100.0% |
-| Provider success rate | 100.0% |
-| Provider latency (mean / P50 / P95) | 1543.9 / 1359.1 / 2851.8 ms |
-| Token usage (runs with provider usage) | 18 |
-| Input / output / total tokens | 44682 / 2604 / 47286 |
-| Tool calls (success rate) | 44 (86.4%) |
-| Tool errors / blocked / invalid | 3 / 3 / 0 |
-| Security blocks / safety violations | 3 / 0 |
-| Terminations | completed: 18 |
-| Last updated | 2026-10-10T05:49:31.471778+00:00 |
-
-_Generated from `.bareloop/eval/runs/test_run/telemetry.jsonl`. Token totals include only records with provider-reported usage._
-<!-- telemetry-dashboard:end -->
