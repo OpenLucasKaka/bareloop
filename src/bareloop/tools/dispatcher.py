@@ -44,8 +44,9 @@ def dispatch_tool_result(
     scope: ToolScope = "main",
     call_id: str | None = None,
     workspace: str | Path | None = None,
+    custom_tools: Mapping[str, Any] | None = None,
 ) -> DispatchResult:
-    definition = get_tool(name)
+    definition = (custom_tools.get(name) if custom_tools else None) or get_tool(name)
     if definition is None:
         return DispatchResult(f"Error: tool '{name}' not found", "error", "unknown_tool")
     if scope == "subagent" and not definition.allow_subagent:
@@ -110,6 +111,7 @@ def dispatch_tool(
     scope: ToolScope = "main",
     call_id: str | None = None,
     workspace: str | Path | None = None,
+    custom_tools: Mapping[str, Any] | None = None,
 ) -> str:
     return dispatch_tool_result(
         name,
@@ -117,4 +119,5 @@ def dispatch_tool(
         scope=scope,
         call_id=call_id,
         workspace=workspace,
+        custom_tools=custom_tools,
     ).output
