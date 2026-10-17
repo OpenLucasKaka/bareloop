@@ -126,4 +126,3 @@ def test_inline_memory_parsing_without_extra_files(tmp_path, monkeypatch):
     # Ensure no standalone .md files were created
     standalone_files = [p for p in mem_dir.glob("*.md") if p.name != "MEMORY.md"]
     assert len(standalone_files) == 0
-

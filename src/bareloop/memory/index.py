@@ -532,7 +532,9 @@ def read_memory_file(filename):
         inline_items = _parse_inline_memories(MEMORY_INDEX, set())
         for item in inline_items:
             if item["filename"] == filename or item["name"] == filename:
-                return _memory_document(item["name"], item["type"], item["body"], item["description"])
+                return _memory_document(
+                    item["name"], item["type"], item["body"], item["description"]
+                )
     return None
 
 

@@ -79,12 +79,7 @@ class Agent:
         if max_rounds < 1:
             raise ValueError("max_rounds must be at least 1")
 
-        self.model = (
-            model
-            or os.getenv("PRIMARY_MODEL")
-            or os.getenv("OPENAI_MODEL")
-            or "gpt-4o"
-        )
+        self.model = model or os.getenv("PRIMARY_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-4o"
         self.system_prompt = system_prompt
         self.workdir = Path(workdir).resolve() if workdir else Path.cwd().resolve()
         self.max_rounds = max_rounds
