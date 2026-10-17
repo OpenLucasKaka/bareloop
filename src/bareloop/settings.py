@@ -19,6 +19,9 @@ PRIMARY_MODEL = os.getenv("PRIMARY_MODEL")
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL")
 MLX_MODEL = os.getenv("MLX_MODEL")
 TOKENIZER_MODEL = os.getenv("TOKENIZER_MODEL")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-qwen3-embedding-4b")
+EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY")
+EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL")
 DEFAULT_MODE = AgentMode.NORMAL
 DEFAULT_MODEL = DEFAULT_MODE  # Alias for backward compatibility
 DEFAUlT_MODEL = DEFAULT_MODE  # Typo alias for backward compatibility
@@ -34,6 +37,17 @@ BOLD = "\033[1m"
 client = OpenAI(
     api_key=os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY") or "bareloop-unconfigured",
     base_url=os.getenv("BASE_URL") or None,
+)
+
+embedding_api_key = (
+    EMBEDDING_API_KEY
+    or os.getenv("API_KEY")
+    or os.getenv("OPENAI_API_KEY")
+    or "bareloop-unconfigured"
+)
+embedding_client = OpenAI(
+    api_key=embedding_api_key,
+    base_url=EMBEDDING_BASE_URL or os.getenv("BASE_URL") or None,
 )
 
 CLI_STYLE = Style.from_dict(

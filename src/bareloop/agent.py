@@ -73,6 +73,7 @@ class Agent:
         enable_memory: bool = False,
         enable_hooks: bool = True,
         enable_goal_gate: bool = False,
+        enable_finalizers: bool | None = None,
         print_output: bool = False,
     ) -> None:
         if max_rounds < 1:
@@ -97,6 +98,9 @@ class Agent:
         self.enable_memory = enable_memory
         self.enable_hooks = enable_hooks
         self.enable_goal_gate = enable_goal_gate
+        self.enable_finalizers = (
+            enable_finalizers if enable_finalizers is not None else enable_memory
+        )
         self.print_output = print_output
 
         # Initialize OpenAI-compatible client
@@ -218,7 +222,7 @@ class Agent:
             enable_loading=False,
             enable_goal_gate=self.enable_goal_gate,
             enable_hooks=self.enable_hooks,
-            enable_finalizers=False,
+            enable_finalizers=self.enable_finalizers,
             print_output=self.print_output,
         )
 

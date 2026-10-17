@@ -140,22 +140,86 @@ def _replace_memory_set(items: list[dict[str, str]]) -> None:
             shutil.rmtree(staging)
 
 
+def _parse_inline_memories(index_path: Path, existing_filenames: set[str]) -> list[dict[str, str]]:
+    if not index_path.exists():
+        return []
+    try:
+        content = index_path.read_text(encoding="utf-8")
+    except Exception:
+        return []
+    inline_items = []
+    current_type = "project"
+    for line in content.splitlines():
+        line_strip = line.strip()
+        if line_strip.startswith("## "):
+            sec_header = line_strip[3:].lower()
+            if "user" in sec_header or "preference" in sec_header or "constraint" in sec_header:
+                current_type = "user"
+            elif "feedback" in sec_header:
+                current_type = "feedback"
+            elif "reference" in sec_header:
+                current_type = "reference"
+            else:
+                current_type = "project"
+            continue
+        # Pattern 1: - **name**: description / body
+        m_bold = re.match(r"^[-*]\s+\*\*([^*]+)\*\*:\s*(.+)$", line_strip)
+        if m_bold:
+            name, text = m_bold.group(1).strip(), m_bold.group(2).strip()
+            slug = _memory_slug(name)
+            filename = f"{slug}.md"
+            if filename.casefold() not in existing_filenames:
+                inline_items.append(
+                    {
+                        "filename": filename,
+                        "name": name,
+                        "description": text[:80],
+                        "type": current_type,
+                        "body": text,
+                    }
+                )
+            continue
+        # Pattern 2: - [name] — description / body (without (filename.md) link)
+        m_bracket = re.match(r"^[-*]\s+\[([^\]]+)\]\s*[—–-]\s*(.+)$", line_strip)
+        if m_bracket:
+            name, text = m_bracket.group(1).strip(), m_bracket.group(2).strip()
+            slug = _memory_slug(name)
+            filename = f"{slug}.md"
+            if filename.casefold() not in existing_filenames:
+                inline_items.append(
+                    {
+                        "filename": filename,
+                        "name": name,
+                        "description": text[:80],
+                        "type": current_type,
+                        "body": text,
+                    }
+                )
+    return inline_items
+
+
 def list_files():
     result = []
+    existing_filenames = set()
     for m in sorted(MEMORY_DIR.glob("*.md")):
         if m.name == "MEMORY.md":
             continue
-        raw = m.read_text()
+        raw = m.read_text(encoding="utf-8")
         meta, body = _parser_formatter(raw)
+        filename = m.name
+        existing_filenames.add(filename.casefold())
         result.append(
             {
-                "filename": m.name,
+                "filename": filename,
                 "name": meta.get("name", ""),
                 "description": meta.get("description", ""),
                 "type": meta.get("type", ""),
                 "body": body,
             }
         )
+    # 支持在 MEMORY.md 中直接内联书写的短记忆（无需单独建文件）
+    inline_items = _parse_inline_memories(MEMORY_INDEX, existing_filenames)
+    result.extend(inline_items)
     return result
 
 
@@ -418,6 +482,8 @@ def extract_relevant_memories(messages: list, max_items: int = 5):
     recent_text = "".join(str(i["content"]) for i in relevant_input)
     if not recent_text.strip():
         return []
+    active_client = getattr(sys.modules[__name__], "client", client)
+
     catalog_lines = []
     for i, m in enumerate(memory_files):
         catalog_lines.append(f"{i}: {m['name']} {m['description']}")
@@ -432,7 +498,7 @@ def extract_relevant_memories(messages: list, max_items: int = 5):
         f"Memory catalog:\n{text}"
     )
     try:
-        response = client.chat.completions.create(
+        response = active_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model=PRIMARY_MODEL,
             max_completion_tokens=200,
@@ -458,9 +524,16 @@ def extract_relevant_memories(messages: list, max_items: int = 5):
 
 def read_memory_file(filename):
     path = MEMORY_DIR / filename
-    if not path.exists():
-        return None
-    return path.read_text()
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+
+    # 检查是否为 MEMORY.md 中的内联短记忆
+    if MEMORY_INDEX.exists():
+        inline_items = _parse_inline_memories(MEMORY_INDEX, set())
+        for item in inline_items:
+            if item["filename"] == filename or item["name"] == filename:
+                return _memory_document(item["name"], item["type"], item["body"], item["description"])
+    return None
 
 
 def load_memories(messages):

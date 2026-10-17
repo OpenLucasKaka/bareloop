@@ -90,3 +90,40 @@ def test_memory_decision_tool_schema():
     assert "name" in function
     assert function["name"] == "decide_memories"
     assert "parameters" in function
+
+
+def test_inline_memory_parsing_without_extra_files(tmp_path, monkeypatch):
+    """Test that short memories written directly in MEMORY.md do not require standalone files."""
+    from bareloop.memory import index as memory
+
+    mem_dir = tmp_path / ".memory"
+    mem_dir.mkdir(parents=True, exist_ok=True)
+    index_file = mem_dir / "MEMORY.md"
+
+    # Write a MEMORY.md with inline memories
+    index_file.write_text(
+        "# Project Memory Index\n\n"
+        "## User Preferences & Constraints\n"
+        "- **user-pref-ts**: User strictly prefers TypeScript over JavaScript.\n"
+        "- [user-role] — User is Tech Lead.\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(memory, "MEMORY_DIR", mem_dir)
+    monkeypatch.setattr(memory, "MEMORY_INDEX", index_file)
+
+    files = memory.list_files()
+    assert len(files) == 2
+    names = {f["name"] for f in files}
+    assert "user-pref-ts" in names
+    assert "user-role" in names
+
+    # Verify read_memory_file can read inline memories dynamically
+    ts_content = memory.read_memory_file("user-pref-ts.md")
+    assert ts_content is not None
+    assert "TypeScript" in ts_content
+
+    # Ensure no standalone .md files were created
+    standalone_files = [p for p in mem_dir.glob("*.md") if p.name != "MEMORY.md"]
+    assert len(standalone_files) == 0
+
