@@ -5,6 +5,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -104,23 +105,108 @@ def _validated_memory_items(items) -> list[dict[str, str]]:
         if normalized_filename in filenames:
             raise ValueError(f"duplicate consolidated memory filename: {filename}")
         filenames.add(normalized_filename)
-        validated.append({**values, "filename": filename})
+        is_inline = _is_inline_memory_candidate(values["type"], values["body"])
+        validated.append({**values, "filename": filename, "is_inline": is_inline})
     return validated
 
 
-def _replace_memory_set(items: list[dict[str, str]]) -> None:
+def _is_inline_memory_candidate(memory_type: str, body: str) -> bool:
+    """Determine if a memory belongs on the core MEMORY.md board versus a standalone topic document.
+
+    In the tiered memory architecture:
+    - User identity, preferences, constraints, and behavioral feedback belong
+      directly on the core MEMORY.md board as bullet rules.
+    - Full structured documents (multi-line structured guides, project architecture,
+      and reference documentation) belong in standalone topic files linked from MEMORY.md.
+    """
+    body_stripped = body.strip()
+    if "\n" in body_stripped:
+        return False
+    return memory_type in ("user", "feedback")
+
+
+def _is_inline_memory(item: dict[str, Any]) -> bool:
+    if item.get("is_inline") is True:
+        return True
+    filename = item.get("filename")
+    if filename and (MEMORY_DIR / filename).exists():
+        return False
+    return _is_inline_memory_candidate(item.get("type", ""), item.get("body", ""))
+
+
+def _format_inline_text(item: dict[str, Any]) -> str:
+    description = (item.get("description") or "").strip()
+    body = (item.get("body") or "").strip()
+    body = " ".join(line.strip() for line in body.splitlines() if line.strip())
+    description = " ".join(line.strip() for line in description.splitlines() if line.strip())
+
+    if not description:
+        return body
+    if not body:
+        return description
+    if body == description:
+        return body
+    if body in description:
+        return description
+    if description in body:
+        return body
+    return f"{description} — {body}"
+
+
+def _replace_memory_set(items: list[dict[str, Any]]) -> None:
     MEMORY_DIR.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{MEMORY_DIR.name}.staging-", dir=MEMORY_DIR.parent))
     backup = MEMORY_DIR.with_name(f"{MEMORY_DIR.name}.backup")
     try:
-        index_lines = []
+        standalone_items = []
+        inline_items = []
         for item in items:
-            (staging / item["filename"]).write_text(
-                _memory_document(item["name"], item["type"], item["body"], item["description"]),
-                encoding="utf-8",
-            )
-            index_lines.append(f"- [{item['name']}]({item['filename']}) — {item['description']}")
-        (staging / "MEMORY.md").write_text("\n".join(index_lines) + "\n", encoding="utf-8")
+            if _is_inline_memory(item):
+                inline_items.append(item)
+            else:
+                standalone_items.append(item)
+                doc = _memory_document(
+                    item["name"], item["type"], item["body"], item["description"]
+                )
+                (staging / item["filename"]).write_text(doc, encoding="utf-8")
+
+        index_sections = []
+        inline_user = [i for i in inline_items if i.get("type") == "user"]
+        inline_feedback = [i for i in inline_items if i.get("type") == "feedback"]
+        inline_other = [i for i in inline_items if i.get("type") not in ("user", "feedback")]
+
+        if inline_user:
+            index_sections.append("## User Preferences & Constraints")
+            for item in inline_user:
+                text = _format_inline_text(item)
+                index_sections.append(f"- **{item['name']}**: {text}")
+            index_sections.append("")
+
+        if inline_feedback:
+            index_sections.append("## Feedback")
+            for item in inline_feedback:
+                text = _format_inline_text(item)
+                index_sections.append(f"- **{item['name']}**: {text}")
+            index_sections.append("")
+
+        if inline_other:
+            index_sections.append("## Notes")
+            for item in inline_other:
+                text = _format_inline_text(item)
+                index_sections.append(f"- **{item['name']}**: {text}")
+            index_sections.append("")
+
+        if standalone_items:
+            if inline_items:
+                index_sections.append("## Documents")
+            for item in standalone_items:
+                link = f"[{item['name']}]({item['filename']})"
+                index_sections.append(f"- {link} — {item['description']}")
+            if inline_items:
+                index_sections.append("")
+
+        content = "\n".join(index_sections).strip() + "\n" if index_sections else ""
+        (staging / "MEMORY.md").write_text(content, encoding="utf-8")
 
         if backup.exists():
             shutil.rmtree(backup)
@@ -396,6 +482,7 @@ def _validated_memory_decisions(payload, existing_files, evidence_messages):
                 raise ValueError(f"create memory slug already exists: {filename}")
             resulting_by_name[name] = len(resulting_items)
             filenames.add(normalized_filename)
+            is_inline = _is_inline_memory_candidate(memory_type, body)
             resulting_items.append(
                 {
                     "filename": filename,
@@ -403,6 +490,7 @@ def _validated_memory_decisions(payload, existing_files, evidence_messages):
                     "description": description,
                     "type": memory_type,
                     "body": body,
+                    "is_inline": is_inline,
                 }
             )
             continue
@@ -419,12 +507,16 @@ def _validated_memory_decisions(payload, existing_files, evidence_messages):
             raise ValueError(f"update target appears more than once: {target_name}")
         updated_targets.add(target_name)
         index = resulting_by_name[target_name]
+        target_filename = resulting_items[index]["filename"]
+        file_on_disk = (MEMORY_DIR / target_filename).exists()
+        is_inline = (not file_on_disk) and _is_inline_memory_candidate(memory_type, body)
         resulting_items[index] = {
-            "filename": resulting_items[index]["filename"],
+            "filename": target_filename,
             "name": name,
             "description": description,
             "type": memory_type,
             "body": body,
+            "is_inline": is_inline,
         }
 
     return decisions, resulting_items
@@ -578,14 +670,48 @@ def write_memory_file(name, type, body, description):
 
 
 def _rebuild_index():
-    """Rebuild MEMORY.md index from all memory files."""
+    """Rebuild MEMORY.md index from all memory files while preserving inline memories."""
     lines = []
     for f in sorted(MEMORY_DIR.glob("*.md")):
         if f.name == "MEMORY.md":
             continue
-        raw = f.read_text()
+        raw = f.read_text(encoding="utf-8")
         meta, body = _parser_formatter(raw)
         name = meta.get("name", f.stem)
         desc = meta.get("description", body.split("\n")[0][:80])
         lines.append(f"- [{name}]({f.name}) — {desc}")
-    MEMORY_INDEX.write_text("\n".join(lines) + "\n" if lines else "")
+
+    if MEMORY_INDEX.exists():
+        existing_filenames = {
+            f.name.casefold() for f in MEMORY_DIR.glob("*.md") if f.name != "MEMORY.md"
+        }
+        inline_items = _parse_inline_memories(MEMORY_INDEX, existing_filenames)
+        if inline_items:
+            sections = []
+            inline_user = [i for i in inline_items if i.get("type") == "user"]
+            inline_feedback = [i for i in inline_items if i.get("type") == "feedback"]
+            inline_other = [i for i in inline_items if i.get("type") not in ("user", "feedback")]
+            if inline_user:
+                sections.append("## User Preferences & Constraints")
+                for item in inline_user:
+                    sections.append(f"- **{item['name']}**: {_format_inline_text(item)}")
+                sections.append("")
+            if inline_feedback:
+                sections.append("## Feedback")
+                for item in inline_feedback:
+                    sections.append(f"- **{item['name']}**: {_format_inline_text(item)}")
+                sections.append("")
+            if inline_other:
+                sections.append("## Notes")
+                for item in inline_other:
+                    sections.append(f"- **{item['name']}**: {_format_inline_text(item)}")
+                sections.append("")
+            if lines:
+                sections.append("## Documents")
+                sections.extend(lines)
+                sections.append("")
+            content = "\n".join(sections).strip() + "\n"
+            MEMORY_INDEX.write_text(content, encoding="utf-8")
+            return
+
+    MEMORY_INDEX.write_text("\n".join(lines) + "\n" if lines else "", encoding="utf-8")

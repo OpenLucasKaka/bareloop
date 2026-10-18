@@ -1565,14 +1565,17 @@ def test_memory_extraction_creates_valid_memory(
     from bareloop.memory import index as memory
 
     memory_dir = tmp_path / ".memory"
-    _configure_memory_extraction(monkeypatch, memory, memory_dir, [_memory_decision()])
+    decision = _memory_decision(
+        body="Use Neovim for future edits.\nPreferences:\n- line numbers: true",
+    )
+    _configure_memory_extraction(monkeypatch, memory, memory_dir, [decision])
 
     memory.extract_memories([{"role": "user", "content": "I prefer Neovim"}], 0)
 
     created = (memory_dir / "editor-choice.md").read_text(encoding="utf-8")
     assert "name: editor-choice" in created
     assert "type: user" in created
-    assert created.endswith("Use Neovim for future edits.\n")
+    assert created.endswith("line numbers: true\n")
     assert "[editor-choice](editor-choice.md)" in (memory_dir / "MEMORY.md").read_text(
         encoding="utf-8"
     )

@@ -126,3 +126,121 @@ def test_inline_memory_parsing_without_extra_files(tmp_path, monkeypatch):
     # Ensure no standalone .md files were created
     standalone_files = [p for p in mem_dir.glob("*.md") if p.name != "MEMORY.md"]
     assert len(standalone_files) == 0
+
+
+def test_extract_memories_creates_inline_memory_for_short_user_identity(tmp_path, monkeypatch):
+    """Test that extract_memories saves short user facts inline in MEMORY.md."""
+    import json
+    from types import SimpleNamespace
+
+    from bareloop.memory import index as memory
+
+    mem_dir = tmp_path / ".memory"
+    decision = {
+        "operation": "create",
+        "target_name": None,
+        "name": "user_identity",
+        "type": "user",
+        "basis": "stable_user_preference",
+        "description": "User's self-identified name is 卡卡 (Kaka)",
+        "body": "卡卡 (Kaka)",
+        "evidence": [{"message_id": "m0", "quote": "我是卡卡"}],
+    }
+    tool_call = SimpleNamespace(
+        function=SimpleNamespace(
+            name="decide_memories",
+            arguments=json.dumps({"decisions": [decision]}),
+        )
+    )
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=[tool_call]))]
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(memory, "MEMORY_DIR", mem_dir)
+    monkeypatch.setattr(memory, "MEMORY_INDEX", mem_dir / "MEMORY.md")
+    monkeypatch.setattr(memory, "client", fake_client)
+
+    result = memory.extract_memories([{"role": "user", "content": "我是卡卡"}], 0)
+    assert result == "写入1条记忆 "
+
+    # Verify no standalone user_identity.md file was created
+    assert not (mem_dir / "user_identity.md").exists()
+    standalone_files = [p for p in mem_dir.glob("*.md") if p.name != "MEMORY.md"]
+    assert len(standalone_files) == 0
+
+    # Verify MEMORY.md contains inline entry
+    index_content = (mem_dir / "MEMORY.md").read_text(encoding="utf-8")
+    assert "## User Preferences & Constraints" in index_content
+    assert "- **user_identity**: User's self-identified name is 卡卡 (Kaka)" in index_content
+
+    # Verify list_files finds the memory
+    files = memory.list_files()
+    assert len(files) == 1
+    assert files[0]["name"] == "user_identity"
+    assert "卡卡" in files[0]["body"]
+
+    # Verify read_memory_file can read it dynamically
+    content = memory.read_memory_file("user_identity.md")
+    assert content is not None
+    assert "name: user_identity" in content
+    assert "卡卡" in content
+
+
+def test_extract_memories_updates_inline_memory_in_place(tmp_path, monkeypatch):
+    """Test that extract_memories updates inline memories in MEMORY.md without creating files."""
+    import json
+    from types import SimpleNamespace
+
+    from bareloop.memory import index as memory
+
+    mem_dir = tmp_path / ".memory"
+    mem_dir.mkdir(parents=True, exist_ok=True)
+    index_file = mem_dir / "MEMORY.md"
+    index_file.write_text(
+        "## User Preferences & Constraints\n"
+        "- **user_identity**: User's self-identified name is 卡卡 (Kaka)\n",
+        encoding="utf-8",
+    )
+
+    update_decision = {
+        "operation": "update",
+        "target_name": "user_identity",
+        "name": "user_identity",
+        "type": "user",
+        "basis": "stable_user_preference",
+        "description": "User's self-identified name is 卢卡斯",
+        "body": "卢卡斯",
+        "evidence": [{"message_id": "m0", "quote": "叫我卢卡斯"}],
+    }
+    tool_call = SimpleNamespace(
+        function=SimpleNamespace(
+            name="decide_memories",
+            arguments=json.dumps({"decisions": [update_decision]}),
+        )
+    )
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=[tool_call]))]
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(memory, "MEMORY_DIR", mem_dir)
+    monkeypatch.setattr(memory, "MEMORY_INDEX", index_file)
+    monkeypatch.setattr(memory, "client", fake_client)
+
+    result = memory.extract_memories([{"role": "user", "content": "叫我卢卡斯"}], 0)
+    assert result == "写入1条记忆 "
+
+    # Verify no standalone file created
+    assert not (mem_dir / "user_identity.md").exists()
+    updated_index = index_file.read_text(encoding="utf-8")
+    assert "卢卡斯" in updated_index
+    assert "卡卡" not in updated_index
