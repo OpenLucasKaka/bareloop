@@ -29,6 +29,17 @@ def test_memory_schema_definitions():
     assert isinstance(PERSISTENT_MEMORY_BASES, list)
     assert len(PERSISTENT_MEMORY_BASES) > 0
 
+    # Test index constants match schema definitions
+    from bareloop.memory.index import (
+        MEMORY_TYPES as INDEX_MEMORY_TYPES,
+    )
+    from bareloop.memory.index import (
+        PERSISTENT_MEMORY_BASES as INDEX_PERSISTENT_MEMORY_BASES,
+    )
+
+    assert frozenset(MEMORY_TYPES) == INDEX_MEMORY_TYPES
+    assert frozenset(PERSISTENT_MEMORY_BASES) == INDEX_PERSISTENT_MEMORY_BASES
+
 
 def test_memory_prompts():
     """Test that memory prompts are properly defined."""

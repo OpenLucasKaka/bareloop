@@ -13,7 +13,16 @@ from bareloop.settings import PRIMARY_MODEL, WORKDIR, client
 from bareloop.utils import _parser_formatter
 
 from .prompt_version import build_consolidation_messages, build_memory_decision_messages
-from .schema import MEMORY_CONSOLIDATION_RESPONSE_FORMAT, MEMORY_DECISION_TOOL
+from .schema import (
+    MEMORY_CONSOLIDATION_RESPONSE_FORMAT,
+    MEMORY_DECISION_TOOL,
+)
+from .schema import (
+    MEMORY_TYPES as _SCHEMA_MEMORY_TYPES,
+)
+from .schema import (
+    PERSISTENT_MEMORY_BASES as _SCHEMA_PERSISTENT_MEMORY_BASES,
+)
 
 MEMORY_DIR = WORKDIR / ".bareloop" / ".memory"
 
@@ -33,17 +42,8 @@ MEMORY_DIR.mkdir(parents=True, exist_ok=True)
 MEMORY_INDEX = MEMORY_DIR / "MEMORY.md"
 
 CONSOLIDATE_THRESHOLD = 10
-MEMORY_TYPES = frozenset({"user", "feedback", "project", "reference"})
-PERSISTENT_MEMORY_BASES = frozenset(
-    {
-        "stable_user_preference",
-        "explicit_user_constraint",
-        "confirmed_feedback",
-        "durable_project_decision",
-        "verified_project_insight",
-        "requested_reference",
-    }
-)
+MEMORY_TYPES = frozenset(_SCHEMA_MEMORY_TYPES)
+PERSISTENT_MEMORY_BASES = frozenset(_SCHEMA_PERSISTENT_MEMORY_BASES)
 USER_EVIDENCE_BASES = frozenset(
     {
         "stable_user_preference",
