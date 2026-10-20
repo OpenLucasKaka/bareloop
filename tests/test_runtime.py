@@ -117,6 +117,40 @@ def test_retry_with_backoff_transient_and_permanent() -> None:
     assert loop_call_count[0] == 2
 
 
+def test_execute_agent_loop_fails_on_length_truncation() -> None:
+    from types import SimpleNamespace
+
+    from bareloop.loop import execute_agent_loop
+    from bareloop.telemetry import RunTermination
+
+    mock_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(content="half sentence...", tool_calls=None),
+                            finish_reason="length",
+                        )
+                    ]
+                )
+            )
+        )
+    )
+    mock_tok = SimpleNamespace(apply_chat_template=lambda *_args, **_kwargs: [])
+    loop_res = execute_agent_loop(
+        [{"role": "user", "content": "hi"}],
+        client=mock_client,
+        model="test-model",
+        tokenizer=mock_tok,
+        workdir=None,
+        max_rounds=1,
+    )
+    assert loop_res.completed is False
+    assert loop_res.termination == RunTermination.PROVIDER_ERROR
+    assert "truncated" in str(loop_res.error)
+
+
 def test_filesystem_uses_cwd_as_security_root(tmp_path: Path) -> None:
     from bareloop.tools.filesystem import run_glob, run_read, run_write
 

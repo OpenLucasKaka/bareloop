@@ -375,7 +375,10 @@ def execute_agent_loop(
                         getattr(response, "usage", None),
                     )
                 )
-                message = response.choices[0].message
+                choices = getattr(response, "choices", None)
+                choice = choices[0] if choices else None
+                message = getattr(choice, "message", None) or getattr(response, "message", None)
+                finish_reason = getattr(choice, "finish_reason", None)
         except Exception as error:
             turn_ui.finish_turn()
             if print_output:
@@ -418,6 +421,21 @@ def execute_agent_loop(
         messages.append(assistant_message)
         memory_evidence_messages.append(deepcopy(assistant_message))
         if not response_tool_calls:
+            if finish_reason == "length":
+                turn_ui.finish_turn()
+                error_msg = "model response was truncated (finish_reason='length')"
+                if print_output:
+                    logger.error(f"Error: {error_msg}")
+                return LoopExecutionResult(
+                    completed=False,
+                    final_output=final_output,
+                    tool_calls=tool_calls,
+                    rounds=rounds,
+                    error=error_msg,
+                    model=model,
+                    telemetry=telemetry,
+                    termination=RunTermination.PROVIDER_ERROR,
+                )
             if (
                 enable_goal_gate
                 and mode == AgentMode.GOAL
