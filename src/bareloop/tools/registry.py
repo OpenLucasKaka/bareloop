@@ -135,13 +135,19 @@ _TOOL_DEFINITIONS = (
     ),
     ToolDefinition(
         name="spawn_subagent",
-        description="委派子 Agent 完成部分任务",
+        description=(
+            "委派一个只读隔离的子 Agent 在独立会话中执行深度调研或检索"
+            "（如全局排查、错误分析），完成后返回提炼摘要，避免污染主会话上下文"
+        ),
         parameters=_parameters({"query": _string("子 Agent 需要完成的任务")}, ("query",)),
         handler=spaw_subagent,
     ),
     ToolDefinition(
         name="spaw_subagent",
-        description="委派子 Agent 完成部分任务",
+        description=(
+            "委派一个只读隔离的子 Agent 在独立会话中执行深度调研或检索"
+            "（如全局排查、错误分析），完成后返回提炼摘要，避免污染主会话上下文"
+        ),
         parameters=_parameters({"query": _string("子 Agent 需要完成的任务")}, ("query",)),
         handler=spaw_subagent,
     ),
@@ -188,7 +194,10 @@ _TOOL_DEFINITIONS = (
     ),
     ToolDefinition(
         name="spawn_teammate",
-        description="Spawn a persistent teammate.",
+        description=(
+            "启动一个持久化运行的异步协作者线程，"
+            "用于并行处理已分配的看板任务（配合 task_id 和可选的 require_plan 审批门禁）"
+        ),
         parameters=_parameters(
             {
                 "name": _string(pattern="^[A-Za-z0-9_-]{1,64}$"),
