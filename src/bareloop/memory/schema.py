@@ -98,7 +98,3 @@ MEMORY_CONSOLIDATION_RESPONSE_FORMAT = {
         },
     },
 }
-
-# Compatibility for the current consolidation caller; later pipeline wiring uses
-# ``MEMORY_CONSOLIDATION_RESPONSE_FORMAT`` directly.
-tool_schema = MEMORY_CONSOLIDATION_RESPONSE_FORMAT
