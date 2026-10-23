@@ -1,4 +1,5 @@
-from typing import Any, Collection, Literal
+from collections.abc import Collection
+from typing import Any, Literal
 
 from bareloop.tools.adapters.skill import load_skill
 from bareloop.tools.adapters.subagent import run_spawn_subagent
