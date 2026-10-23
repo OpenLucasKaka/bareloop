@@ -25,13 +25,19 @@ def test_naming_and_entrypoint_aliases() -> None:
     assert DEFAUlT_MODEL == AgentMode.NORMAL
 
 
-def test_subagent_tool_name_and_alias() -> None:
+def test_subagent_tool_name() -> None:
     tool_primary = get_tool("spawn_subagent")
-    tool_legacy = get_tool("spaw_subagent")
 
     assert tool_primary is not None
-    assert tool_legacy is not None
     assert tool_primary.parameters["properties"]["query"]["type"] == "string"
+
+
+def test_teammate_adapter_spelling_alias() -> None:
+    from bareloop.tools.adapters import teamate, teammate
+
+    assert teammate.run_spawn_teammate is not None
+    assert teamate.run_spawn_teammate is not None
+    assert teamate is teammate
 
 
 def test_dispatcher_rejects_invalid_arguments_against_schema() -> None:
@@ -111,3 +117,20 @@ def test_worktree_lifecycle_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert "Invalid worktree name" in remove_worktree("..bad")
     # Non-existent worktree
     assert "does not exist" in remove_worktree("non_existent_wt_test")
+
+
+def test_get_tool_schemas_and_definitions_support_filtering() -> None:
+    from bareloop.tools.registry import get_tool_definitions, get_tool_schemas
+
+    all_defs = get_tool_definitions()
+    assert len(all_defs) > 2
+
+    filtered_defs = get_tool_definitions(names={"read", "write"})
+    assert {d.name for d in filtered_defs} == {"read", "write"}
+
+    filtered_schemas = get_tool_schemas(names={"read", "write"})
+    assert {s["function"]["name"] for s in filtered_schemas} == {"read", "write"}
+
+    none_schemas = get_tool_schemas(names=None)
+    assert len(none_schemas) == len(all_defs)
+

@@ -276,16 +276,17 @@ def execute_agent_loop(
                 messages[:] = tool_budget_result(messages)
                 # 压缩策略L1: 将距当前远的工具调用结果删除 需要时再重新调用工具
                 messages[:] = micro_compact(messages)
-                tool_schemas = get_tool_schemas()
+                try:
+                    tool_schemas = get_tool_schemas(names=allowed_tool_names)
+                except TypeError:
+                    tool_schemas = get_tool_schemas()
                 if custom_tools:
                     for custom_tool_def in custom_tools.values():
-                        tool_schemas.append(custom_tool_def.as_openai_tool())
-                if allowed_tool_names is not None:
-                    tool_schemas = [
-                        tool
-                        for tool in tool_schemas
-                        if tool["function"]["name"] in allowed_tool_names
-                    ]
+                        if (
+                            allowed_tool_names is None
+                            or custom_tool_def.name in allowed_tool_names
+                        ):
+                            tool_schemas.append(custom_tool_def.as_openai_tool())
                 current_token = tokenizer.apply_chat_template(
                     messages,
                     tools=tool_schemas,

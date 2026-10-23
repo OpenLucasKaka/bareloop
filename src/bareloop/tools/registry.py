@@ -1,7 +1,7 @@
-from typing import Any, Literal
+from typing import Any, Collection, Literal
 
 from bareloop.tools.adapters.skill import load_skill
-from bareloop.tools.adapters.subagent import spaw_subagent
+from bareloop.tools.adapters.subagent import run_spawn_subagent
 from bareloop.tools.adapters.task import (
     run_claim_task,
     run_complete_task,
@@ -39,9 +39,9 @@ def _string(description: str | None = None, **constraints: Any) -> dict[str, Any
 
 def _teammate_handler(name: str):
     def handler(**kwargs: Any):
-        from bareloop.tools.adapters import teamate
+        from bareloop.tools.adapters import teammate
 
-        return getattr(teamate, name)(**kwargs)
+        return getattr(teammate, name)(**kwargs)
 
     return handler
 
@@ -140,16 +140,7 @@ _TOOL_DEFINITIONS = (
             "（如全局排查、错误分析），完成后返回提炼摘要，避免污染主会话上下文"
         ),
         parameters=_parameters({"query": _string("子 Agent 需要完成的任务")}, ("query",)),
-        handler=spaw_subagent,
-    ),
-    ToolDefinition(
-        name="spaw_subagent",
-        description=(
-            "委派一个只读隔离的子 Agent 在独立会话中执行深度调研或检索"
-            "（如全局排查、错误分析），完成后返回提炼摘要，避免污染主会话上下文"
-        ),
-        parameters=_parameters({"query": _string("子 Agent 需要完成的任务")}, ("query",)),
-        handler=spaw_subagent,
+        handler=run_spawn_subagent,
     ),
     ToolDefinition(
         name="create_task",
@@ -315,16 +306,27 @@ if len(_TOOLS_BY_NAME) != len(_TOOL_DEFINITIONS):
     raise RuntimeError("Duplicate tool name in registry")
 
 
-def get_tool_definitions(scope: ToolScope = "main") -> tuple[ToolDefinition, ...]:
+def get_tool_definitions(
+    scope: ToolScope = "main",
+    names: Collection[str] | None = None,
+) -> tuple[ToolDefinition, ...]:
     if scope == "main":
-        return (*_TOOL_DEFINITIONS, *_DYNAMIC_TOOLS_BY_NAME.values())
-    if scope == "subagent":
-        return tuple(tool for tool in _TOOL_DEFINITIONS if tool.allow_subagent)
-    raise ValueError(f"Unknown tool scope: {scope}")
+        defs = (*_TOOL_DEFINITIONS, *_DYNAMIC_TOOLS_BY_NAME.values())
+    elif scope == "subagent":
+        defs = tuple(tool for tool in _TOOL_DEFINITIONS if tool.allow_subagent)
+    else:
+        raise ValueError(f"Unknown tool scope: {scope}")
+    if names is not None:
+        name_set = set(names)
+        return tuple(tool for tool in defs if tool.name in name_set)
+    return defs
 
 
-def get_tool_schemas(scope: ToolScope = "main") -> list[dict[str, Any]]:
-    return [definition.as_openai_tool() for definition in get_tool_definitions(scope)]
+def get_tool_schemas(
+    scope: ToolScope = "main",
+    names: Collection[str] | None = None,
+) -> list[dict[str, Any]]:
+    return [definition.as_openai_tool() for definition in get_tool_definitions(scope, names=names)]
 
 
 def get_tool(name: str) -> ToolDefinition | None:

@@ -7,7 +7,7 @@ from bareloop.logger import logger
 from bareloop.settings import PRIMARY_MODEL, WORKDIR, client
 
 KEEP_RECENT = 50
-CONTEXT_LIMIT = 1000
+CONTEXT_LIMIT = 32000
 TRANSCRIPT_DIR = WORKDIR / ".bareloop" / ".transcripts"
 PERSIST_THRESHOLD = 1000
 TOOL_RESULTS_DIR = WORKDIR / ".bareloop" / ".task_outputs" / "tool-results"
