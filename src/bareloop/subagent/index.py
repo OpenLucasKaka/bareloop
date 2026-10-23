@@ -2,20 +2,28 @@ from typing import Any
 
 from bareloop.hook import trigger_hook
 from bareloop.settings import PRIMARY_MODEL, client
-from bareloop.tools.dispatcher import dispatch_tool
-from bareloop.tools.registry import get_tool_schemas
 from bareloop.utils import normalize_tool_call
 
-SUBAGENT_TOOL_SCHEMAS = get_tool_schemas(scope="subagent")
+
+def __getattr__(name: str) -> Any:
+    if name == "SUBAGENT_TOOL_SCHEMAS":
+        from bareloop.tools.registry import get_tool_schemas
+
+        return get_tool_schemas(scope="subagent")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def spawn_subagent(query: str) -> str:
+    from bareloop.tools.dispatcher import dispatch_tool
+    from bareloop.tools.registry import get_tool_schemas
+
     messages: list[dict[str, Any]] = [{"role": "user", "content": query}]
+    tools = get_tool_schemas(scope="subagent")
     for _ in range(30):
         response = client.chat.completions.create(
             model=PRIMARY_MODEL,
             messages=messages,
-            tools=SUBAGENT_TOOL_SCHEMAS,
+            tools=tools,
         )
         message = response.choices[0].message
         assistant_message: dict[str, Any] = {
