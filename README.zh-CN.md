@@ -200,6 +200,7 @@ BareLoop 先尝试本地地址，再尝试配置的 `MCP_REMOTE_URL`；发现的
 | `TOKENIZER_MODEL` | 是 | Transformers Tokenizer，用于估算上下文大小 |
 | `FALLBACK_MODEL` | 否 | 预留的 Fallback Model 标识，目前未接入路由 |
 | `MLX_MODEL` | 否 | 预留的本地 MLX Model 标识，目前未接入路由 |
+| `BARELOOP_ENABLE_MCP` | 否 | MCP Client 工具发现，默认 `true`；设为 `false`、`0`、`no` 或 `off` 可跳过（不区分大小写） |
 | `MCP_LOCAL_URL` | 否 | 本地 MCP 地址，默认 `http://127.0.0.1:8000/mcp` |
 | `MCP_REMOTE_URL` | 否 | 远程 MCP 备用地址 |
 | `MCP_REMOTE_TOKEN` | 否 | 远程 MCP Bearer Token |
@@ -286,4 +287,3 @@ Public API 稳定性仍在开发中。现阶段请以源码和测试作为行为
 ## License
 
 BareLoop 使用 [MIT License](LICENSE)。
-
