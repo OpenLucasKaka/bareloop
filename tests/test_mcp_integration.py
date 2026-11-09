@@ -99,6 +99,8 @@ def test_mcp_startup_degrades_when_endpoint_is_unreachable(
 ) -> None:
     from bareloop.mcp_integration import client as mcp_client
 
+    monkeypatch.setenv("BARELOOP_ENABLE_MCP", "true")
+
     async def fail_initialize(self, configs):
         raise ConnectionError("offline")
 
@@ -126,6 +128,7 @@ def test_remote_mcp_token_requires_encrypted_transport(
 ) -> None:
     from bareloop.mcp_integration import client as mcp_client
 
+    monkeypatch.setenv("BARELOOP_ENABLE_MCP", "true")
     monkeypatch.setenv("MCP_REMOTE_URL", "http://example.com/mcp")
     monkeypatch.setenv("MCP_REMOTE_TOKEN", "do-not-log-this-token")
 
