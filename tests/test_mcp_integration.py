@@ -1,7 +1,86 @@
 import asyncio
+from concurrent.futures import Future
 from importlib import import_module
+from unittest.mock import AsyncMock, Mock
 
 import pytest
+
+
+@pytest.mark.parametrize("setting", ["false", "0", "no", "off", " FALSE ", "No", " Off "])
+def test_disabled_mcp_does_not_start_background_discovery(monkeypatch, setting) -> None:
+    from bareloop.mcp_integration import client as mcp_client
+
+    monkeypatch.setenv("BARELOOP_ENABLE_MCP", setting)
+    monkeypatch.setattr(mcp_client, "_mcp_init_future", None)
+    executor = Mock(side_effect=AssertionError("disabled MCP must not create a thread"))
+    monkeypatch.setattr(mcp_client.concurrent.futures, "ThreadPoolExecutor", executor)
+
+    mcp_client.start_background_mcp_init()
+
+    executor.assert_not_called()
+    assert mcp_client._mcp_init_future is None
+    assert mcp_client.wait_for_mcp_init() == []
+
+
+@pytest.mark.parametrize("setting", ["false", "0", "no", "off", " FALSE ", "No", " Off "])
+def test_disabled_mcp_skips_direct_discovery(monkeypatch, setting, capsys) -> None:
+    from bareloop.mcp_integration import client as mcp_client
+
+    monkeypatch.setenv("BARELOOP_ENABLE_MCP", setting)
+    monkeypatch.setenv("MCP_LOCAL_URL", "http://127.0.0.1:8000/mcp")
+    monkeypatch.setenv("MCP_REMOTE_URL", "https://example.invalid/mcp")
+    manager = Mock(side_effect=AssertionError("disabled MCP must not discover endpoints"))
+    register = Mock()
+    monkeypatch.setattr(mcp_client, "MCPClientManager", manager)
+    monkeypatch.setattr(mcp_client, "register_dynamic_tools", register)
+
+    assert asyncio.run(mcp_client.mcp_init()) == []
+
+    manager.assert_not_called()
+    register.assert_not_called()
+    assert capsys.readouterr().err == ""
+
+
+@pytest.mark.parametrize("setting", [None, "true", "1", "yes", " TRUE ", "unrecognized", ""])
+def test_enabled_mcp_schedules_discovery_once(monkeypatch, setting) -> None:
+    from bareloop.mcp_integration import client as mcp_client
+
+    monkeypatch.delenv("BARELOOP_ENABLE_MCP", raising=False)
+    if setting is not None:
+        monkeypatch.setenv("BARELOOP_ENABLE_MCP", setting)
+    monkeypatch.setattr(mcp_client, "_mcp_init_future", None)
+    future = Future()
+    future.set_result([])
+    executor = Mock()
+    executor.submit.return_value = future
+    monkeypatch.setattr(
+        mcp_client.concurrent.futures, "ThreadPoolExecutor", Mock(return_value=executor)
+    )
+
+    mcp_client.start_background_mcp_init()
+    mcp_client.start_background_mcp_init()
+
+    executor.submit.assert_called_once()
+    assert mcp_client.wait_for_mcp_init() == []
+
+
+@pytest.mark.parametrize("setting", [None, "true", "1", "yes", " TRUE ", "unrecognized", ""])
+def test_enabled_mcp_still_initializes_endpoints(monkeypatch, setting) -> None:
+    from bareloop.mcp_integration import client as mcp_client
+
+    monkeypatch.delenv("BARELOOP_ENABLE_MCP", raising=False)
+    if setting is not None:
+        monkeypatch.setenv("BARELOOP_ENABLE_MCP", setting)
+    monkeypatch.delenv("MCP_REMOTE_URL", raising=False)
+    initialize = AsyncMock()
+    register = Mock()
+    monkeypatch.setattr(mcp_client.MCPClientManager, "initialize", initialize)
+    monkeypatch.setattr(mcp_client, "register_dynamic_tools", register)
+
+    assert asyncio.run(mcp_client.mcp_init()) == []
+
+    initialize.assert_awaited_once()
+    register.assert_called_once_with([])
 
 
 def test_mcp_server_uses_standard_path(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -19,6 +98,8 @@ def test_mcp_startup_degrades_when_endpoint_is_unreachable(
     monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     from bareloop.mcp_integration import client as mcp_client
+
+    monkeypatch.setenv("BARELOOP_ENABLE_MCP", "true")
 
     async def fail_initialize(self, configs):
         raise ConnectionError("offline")
@@ -47,6 +128,7 @@ def test_remote_mcp_token_requires_encrypted_transport(
 ) -> None:
     from bareloop.mcp_integration import client as mcp_client
 
+    monkeypatch.setenv("BARELOOP_ENABLE_MCP", "true")
     monkeypatch.setenv("MCP_REMOTE_URL", "http://example.com/mcp")
     monkeypatch.setenv("MCP_REMOTE_TOKEN", "do-not-log-this-token")
 

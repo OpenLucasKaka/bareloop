@@ -292,7 +292,19 @@ def _validate_authenticated_endpoint(url: str) -> None:
     raise ValueError("Authenticated remote MCP endpoints require HTTPS")
 
 
+def _mcp_enabled() -> bool:
+    return os.getenv("BARELOOP_ENABLE_MCP", "true").strip().lower() not in {
+        "false",
+        "0",
+        "no",
+        "off",
+    }
+
+
 async def mcp_init() -> list[ToolDefinition]:
+    if not _mcp_enabled():
+        return []
+
     local_url = os.getenv(
         "MCP_LOCAL_URL",
         "http://127.0.0.1:8000/mcp",
@@ -354,7 +366,7 @@ _mcp_init_future: concurrent.futures.Future | None = None
 def start_background_mcp_init() -> None:
     """Start MCP discovery in a background thread concurrently with CLI start."""
     global _mcp_init_future
-    if _mcp_init_future is not None:
+    if not _mcp_enabled() or _mcp_init_future is not None:
         return
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="mcp-init")
     _mcp_init_future = executor.submit(lambda: asyncio.run(mcp_init()))

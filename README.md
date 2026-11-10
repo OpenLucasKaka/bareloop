@@ -218,6 +218,7 @@ endpoint carrying `MCP_REMOTE_TOKEN` must use HTTPS; loopback HTTP remains avail
 | `TOKENIZER_MODEL` | Yes | Transformers tokenizer used to estimate context size |
 | `FALLBACK_MODEL` | No | Reserved fallback model identifier |
 | `MLX_MODEL` | No | Reserved local MLX model identifier |
+| `BARELOOP_ENABLE_MCP` | No | MCP client discovery; defaults to `true`. Use `false`, `0`, `no`, or `off` to skip it (case-insensitive) |
 | `MCP_LOCAL_URL` | No | Local MCP URL; defaults to `http://127.0.0.1:8000/mcp` |
 | `MCP_REMOTE_URL` | No | Remote MCP fallback URL |
 | `MCP_REMOTE_TOKEN` | No | Bearer token for the remote MCP endpoint |
@@ -307,4 +308,3 @@ the source and tests as the current contract.
 ## License
 
 BareLoop is released under the [MIT License](LICENSE).
-
